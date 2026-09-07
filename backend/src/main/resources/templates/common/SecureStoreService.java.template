@@ -1,0 +1,8 @@
+package com.sap.it.api.securestore;
+
+/**
+ * SAP Cloud Integration SecureStoreService Stub for compilation
+ */
+public interface SecureStoreService {
+    UserCredential getUserCredential(String alias) throws Exception;
+}

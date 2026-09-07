@@ -1,0 +1,5 @@
+Adapter-Name={{adapterName}}
+Adapter-Vendor={{vendor}}
+Adapter-Version={{adapterVersion}}
+Adapter-ID={{scheme}}
+Adapter-Scheme={{scheme}}

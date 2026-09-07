@@ -1,0 +1,96 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<ComponentMetadata xmlns:gen="http://www.sap.hci.adk.com/gen"
+                   xmlns:bp="http://www.adk.gen/xmlns/blueprint"
+                   ComponentId="ctype::Adapter/cname::{{adapterName}}/vendor::{{vendor}}/version::{{adapterVersion}}"
+                   ComponentName="{{adapterName}}"
+                   UIElementType="Adapter"
+                   IsExtension="false"
+                   IsFinal="true"
+                   IsPreserves="true"
+                   IsDefaultGenerator="true"
+                   ComponentDisplayName="{{adapterName}}">
+
+    <Variant VariantName="{{adapterName}} Sender"
+             VariantId="ctype::AdapterVariant/cname::{{adapterName}}/vendor::{{vendor}}/tp::{{scheme}}/mp::{{scheme}}/direction::Sender"
+             MetadataVersion="2.0"
+             gen:RuntimeComponentBaseUri="{{scheme}}"
+             AttachmentBehavior="Preserve">
+        <InputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </InputContent>
+        <OutputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </OutputContent>
+        <Tab id="connection">
+            <GuiLabels guid="947ffd8b-60ab-4a87-8f97-772697aa14f5">
+                <Label language="EN">Connection</Label>
+                <Label language="DE">Connection</Label>
+            </GuiLabels>
+            <AttributeGroup id="defaultUriParameter">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">URI Setting</Name>
+                <GuiLabels guid="b2b1d216-254a-474b-bb0e-35d60a9e1fd2">
+                    <Label language="EN">URI Setting</Label>
+                    <Label language="DE">URI Setting</Label>
+                </GuiLabels>
+            </AttributeGroup>
+            <AttributeGroup id="{{adapterName}}Endpoint">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">{{adapterName}}</Name>
+                <GuiLabels guid="9ec2c525-219c-4792-8206-5b67001fbbff">
+                    <Label language="EN">{{adapterName}} Endpoint</Label>
+                    <Label language="DE">{{adapterName}} Endpoint</Label>
+                </GuiLabels>
+{{senderAttributeReferences}}
+            </AttributeGroup>
+        </Tab>
+    </Variant>
+
+    <Variant VariantName="{{adapterName}} Receiver"
+             VariantId="ctype::AdapterVariant/cname::{{adapterName}}/vendor::{{vendor}}/tp::{{scheme}}/mp::{{scheme}}/direction::Receiver"
+             IsRequestResponse="true"
+             MetadataVersion="2.0"
+             gen:RuntimeComponentBaseUri="{{scheme}}"
+             AttachmentBehavior="Preserve">
+        <InputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </InputContent>
+        <OutputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </OutputContent>
+        <Tab id="connection">
+            <GuiLabels guid="ac70982c-5d11-4b97-95c5-2d59cb4f7754">
+                <Label language="EN">Connection</Label>
+                <Label language="DE">Connection</Label>
+            </GuiLabels>
+            <AttributeGroup id="defaultUriParameter">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">URI Setting</Name>
+                <GuiLabels guid="304decfc-5103-4f4b-a258-8c81f7b8663f">
+                    <Label language="EN">URI Setting</Label>
+                    <Label language="DE">URI Setting</Label>
+                </GuiLabels>
+            </AttributeGroup>
+            <AttributeGroup id="{{adapterName}}Endpoint">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">{{adapterName}}</Name>
+                <GuiLabels guid="820ea6ce-9811-4375-9c16-989c8086af14">
+                    <Label language="EN">{{adapterName}} Endpoint</Label>
+                    <Label language="DE">{{adapterName}} Endpoint</Label>
+                </GuiLabels>
+{{receiverAttributeReferences}}
+            </AttributeGroup>
+        </Tab>
+    </Variant>
+
+{{attributeMetadataEntries}}
+
+</ComponentMetadata>

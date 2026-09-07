@@ -1,0 +1,7 @@
+Subsystem-ManifestVersion: 1.0
+Subsystem-SymbolicName: {{symbolicName}}.esa
+Subsystem-Version: {{adapterVersion}}
+Subsystem-Type: osgi.subsystem.feature
+Subsystem-Name: {{adapterName}} ESA Package
+Subsystem-Vendor: {{vendor}}
+Subsystem-Content: {{scheme}}-adapter;version="{{adapterVersion}}"

@@ -1,0 +1,18 @@
+Manifest-Version: 1.0
+SAP-BundleType: IntegrationAdapter
+SAP-NodeType: IFLMAP
+SAP-AdapterName: {{adapterName}}
+Subsystem-ManifestVersion: 1.0
+Subsystem-Name: {{adapterName}}
+Bundle-Vendor: {{vendor}}
+Subsystem-SymbolicName: {{adapterName}}_{{vendor}}
+SAP-ArtifactId: {{adapterName}}_{{vendor}}
+Subsystem-Version: {{adapterVersion}}
+Subsystem-Type: osgi.subsystem.composite
+Subsystem-Content: {{artifactId}};version="[{{adapterVersion}},{{adapterVersion}}]",{{adapterName}}_{{vendor}}.monitor;version="[1.0.0,1.0.0]"
+Import-Package: com.sap.it.api,com.sap.it.api.securestore,org.apache.camel,org.apache.camel.spi,org.apache.camel.support,org.slf4j,javax.security.auth.x500,javax.naming,javax.net.ssl,javax.servlet,javax.naming.directory,javax.crypto.spec,javax.security.cert,javax.net,javax.naming.ldap,javax.crypto,com.sap.it.op.component.check,org.osgi.service.blueprint.container,com.sap.it.nm.component,com.sap.esb.monitoring.messages.adapter
+Require-Capability: osgi.extender; filter:="(osgi.extender=org.apache.camel)"
+Subsystem-ExportService: org.apache.camel.spi.ComponentResolver,org.osgi.service.blueprint.container.BlueprintListener,com.sap.it.nm.component.ComponentMonitor,com.sap.it.api.adapter.monitoring.AdapterEndpointInformationService
+Subsystem-ImportService: com.sap.it.op.component.check.ServiceComponentRuntimeAccess; filter:="(service.id=*)", com.sap.cloud.crypto.keystore.api.KeyStoreService; filter:="(service.id=*)"
+Provide-Capability: com.sap.it.capability.adapter; name:String="{{vendor}}:{{adapterName}}"; description:String="{{adapterName}}"; vendor:String="{{vendor}}"; version:Version="{{adapterVersion}}"; metadata:String="/metadata/metadata.xml"; displayName:String="{{adapterName}}"
+
