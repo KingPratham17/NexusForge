@@ -36,10 +36,12 @@ public class AdapterGeneratorService {
                 spec.getTarget() != null ? spec.getTarget().getTechnology() : "unknown",
                 workspaceDir);
 
-        pruneOldWorkspaces(workspaceDir.getParent());
+        Path workspacesRoot = workspaceDir.getParent();
+        pruneOldWorkspaces(workspacesRoot, workspaceDir);
+        Files.createDirectories(workspaceDir);
 
-        Map<String, String> generatedFiles = new HashMap<>();
         Map<String, String> ctx = buildContext(spec);
+        Map<String, String> generatedFiles = new LinkedHashMap<>();
 
         String packageDirStr = ctx.get("packagePath").replace('.', '/');
         Path javaSrcDir = workspaceDir.resolve("src/main/java/" + packageDirStr);
@@ -110,12 +112,21 @@ public class AdapterGeneratorService {
         return generatedFiles;
     }
 
-    private void pruneOldWorkspaces(Path workspacesRoot) {
+    private void pruneOldWorkspaces(Path workspacesRoot, Path currentWorkspaceDir) {
         if (workspacesRoot == null || !Files.exists(workspacesRoot))
             return;
         try (Stream<Path> stream = Files.list(workspacesRoot)) {
+            long threshold = System.currentTimeMillis() - (2L * 60 * 60 * 1000); // 2 hours old
             stream.filter(Files::isDirectory)
                     .filter(p -> p.getFileName().toString().startsWith("build-"))
+                    .filter(p -> !p.equals(currentWorkspaceDir))
+                    .filter(p -> {
+                        try {
+                            return Files.getLastModifiedTime(p).toMillis() < threshold;
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
                     .forEach(p -> {
                         try {
                             deleteDirectoryRecursively(p);
@@ -181,7 +192,8 @@ public class AdapterGeneratorService {
                 ? spec.getTarget().getProducerImports()
                 : "";
 
-        String producerImports = rawProducerImports + "\nimport java.nio.charset.StandardCharsets;\nimport javax.net.ssl.SSLContext;\nimport javax.net.ssl.SSLSocketFactory;\n";
+        StringBuilder importsBuilder = new StringBuilder(rawProducerImports);
+        importsBuilder.append("\nimport java.nio.charset.StandardCharsets;\nimport javax.net.ssl.SSLContext;\nimport javax.net.ssl.SSLSocketFactory;\n");
 
         List<ConnectionParameter> params = getParams(spec);
 
@@ -191,6 +203,22 @@ public class AdapterGeneratorService {
                         : "        LOG.info(\"Processing message exchange payload for "
                                 + (spec.getTarget() != null ? spec.getTarget().getTechnology() : "Target System")
                                 + "\");";
+
+        // Auto-inject commonly missed SDK class imports if referenced in producer code
+        if (rawProducerImpl.contains("ApiFuture") && !importsBuilder.toString().contains("ApiFuture")) {
+            importsBuilder.append("import com.google.api.core.ApiFuture;\n");
+        }
+        if (rawProducerImpl.contains("ExecutionException") && !importsBuilder.toString().contains("ExecutionException")) {
+            importsBuilder.append("import java.util.concurrent.ExecutionException;\n");
+        }
+        if (rawProducerImpl.contains("TimeoutException") && !importsBuilder.toString().contains("TimeoutException")) {
+            importsBuilder.append("import java.util.concurrent.TimeoutException;\n");
+        }
+        if (rawProducerImpl.contains("TimeUnit") && !importsBuilder.toString().contains("TimeUnit")) {
+            importsBuilder.append("import java.util.concurrent.TimeUnit;\n");
+        }
+
+        String producerImports = importsBuilder.toString();
 
         String producerImpl = sanitizeProducerImplementation(rawProducerImpl, params);
 
@@ -222,18 +250,28 @@ public class AdapterGeneratorService {
 
         // GENERIC RULE 1: Strip any org.apache.camel:camel-* dependencies.
         // The Camel core is already provided by the SAP ADK parent POM.
-        // AI frequently hallucinates camel wrapper modules that were removed in Camel
-        // 3.x.
         deps = deps.replaceAll(
                 "(?s)<dependency>\\s*<groupId>org\\.apache\\.camel</groupId>\\s*<artifactId>camel-[^<]+</artifactId>.*?</dependency>",
                 "");
 
         // GENERIC RULE 2: Strip any provided-scope or test-scope dependencies.
-        // Our bundle needs compile-scope only; provided/test scopes cause OSGi
-        // packaging issues.
         deps = deps.replaceAll("(?s)<dependency>[^<]*<scope>(?:provided|test)</scope>.*?</dependency>", "");
 
-        // GENERIC RULE 3: Clean up leftover blank lines from stripped dependencies
+        // GENERIC RULE 3: Strip duplicate jackson-databind (already provided in base pom at 2.15.4)
+        deps = deps.replaceAll(
+                "(?s)<dependency>\\s*<groupId>com\\.fasterxml\\.jackson\\.core</groupId>\\s*<artifactId>jackson-databind</artifactId>.*?</dependency>",
+                "");
+
+        // GENERIC RULE 4: Strip duplicate slf4j or log4j dependencies (already in parent pom)
+        deps = deps.replaceAll(
+                "(?s)<dependency>\\s*<groupId>(?:org\\.slf4j|log4j)</groupId>.*?</dependency>",
+                "");
+
+        // GENERIC RULE 5: Fix known invalid Maven Central coordinates from AI hallucination
+        deps = deps.replaceAll("<groupId>com\\.force\\.api</groupId>", "<groupId>com.frejo</groupId>");
+        deps = deps.replaceAll("v3-rev20240815-[^<]+", "v3-rev20240809-2.0.0");
+
+        // GENERIC RULE 6: Clean up leftover blank lines
         deps = deps.replaceAll("(?m)^\\s*$\\n", "");
 
         return deps;
@@ -285,25 +323,24 @@ public class AdapterGeneratorService {
         impl = impl.replaceAll("\\bbody\\.get(?!(?:Bytes|Class)\\b)(\\w+)\\(\\)",
                 "(data != null && data.containsKey(\"$1\".toLowerCase()) ? String.valueOf(data.get(\"$1\".toLowerCase())) : \"\")");
 
-        // GENERIC RULE 4: Auto-wrap String connection params passed to methods
-        // expecting int.
-        // Pattern: any method argument matching a known String param name in an int
-        // context
-        // e.g. client.publish(topic, payload, qosLevel, false) →
-        // Integer.parseInt(qosLevel)
-        // We detect: ", <paramName>," or ", <paramName>)" where paramName is a known
-        // String connection param
+        // GENERIC RULE 4: Auto-wrap String connection params passed to methods expecting int or numeric comparisons.
         if (params != null) {
             for (ConnectionParameter p : params) {
                 if ("integer".equalsIgnoreCase(p.getType()) || "int".equalsIgnoreCase(p.getType())) {
                     continue; // already int type, no conversion needed
                 }
                 String varName = toCamelCase(p.getName());
-                // Only wrap params whose names suggest numeric values (port, qos, timeout,
-                // retries, etc.)
+                // Only wrap params whose names suggest numeric values (port, qos, timeout, retries, limit, etc.)
                 if (varName.toLowerCase().matches(
                         ".*(port|qos|timeout|retries|retry|count|size|level|interval|batch|limit|ttl|max|min|num|delay).*")) {
-                    // Wrap standalone usage: ", varName," or ", varName)"
+                    // Wrap binary comparisons with numeric literals: e.g. "limit > 0" -> "Integer.parseInt(limit) > 0"
+                    impl = impl.replaceAll("\\b" + varName + "\\s*([><!=]=?)\\s*([0-9]+)", "(Integer.parseInt(" + varName + ") $1 $2)");
+                    impl = impl.replaceAll("([0-9]+)\\s*([><!=]=?)\\s*" + varName + "\\b", "($1 $2 Integer.parseInt(" + varName + "))");
+
+                    // Wrap single-arg method calls: e.g. "query.limit(limit)" -> "query.limit(Integer.parseInt(limit))"
+                    impl = impl.replaceAll("(?<=[a-zA-Z0-9_]\\()\\s*" + varName + "\\s*\\)", "Integer.parseInt(" + varName + "))");
+
+                    // Wrap multi-arg method calls: ", limit," or ", limit)"
                     impl = impl.replaceAll(",\\s*" + varName + "\\s*,", ", Integer.parseInt(" + varName + "),");
                     impl = impl.replaceAll(",\\s*" + varName + "\\s*\\)", ", Integer.parseInt(" + varName + "))");
                 }
@@ -312,9 +349,6 @@ public class AdapterGeneratorService {
 
         // GENERIC RULE 5: Auto-normalize connection host/broker/server URIs to prepend
         // "tcp://" if scheme is missing.
-        // CPI users often enter "broker.hivemq.com:1883" without "tcp://".
-        // Omitting scheme causes client libraries (like Paho MQTT) to fail with
-        // java.io.EOFException.
         if (params != null) {
             for (ConnectionParameter p : params) {
                 String varName = toCamelCase(p.getName());
@@ -327,23 +361,27 @@ public class AdapterGeneratorService {
             }
         }
 
-        // GENERIC RULE 6: Provide fallback declarations for common connection variables
-        // (password, username, secretKey, token) if referenced in producer code but not explicitly in params.
+        // GENERIC RULE 6: Provide fallback declarations for common credential variables
+        // (serviceAccountJson, password, username, apiKey, token, secretKey, etc.) if referenced in producer code but not explicitly in params.
         Set<String> definedVars = new HashSet<>();
         if (params != null) {
             for (ConnectionParameter p : params) {
                 definedVars.add(toCamelCase(p.getName()));
             }
         }
-        if (!definedVars.contains("password") && impl.contains("password")) {
-            if (definedVars.contains("credentialAlias")) {
-                impl = "        String password = (endpoint.getCredentialAlias() != null ? endpoint.getCredentialAlias() : \"\");\n" + impl;
-            } else {
-                impl = "        String password = \"\";\n" + impl;
+
+        List<String> credentialFallbacks = List.of(
+            "serviceAccountJson", "password", "username", "apiKey", "token", "secretKey", "clientSecret", "authToken", "privateKey"
+        );
+        for (String credVar : credentialFallbacks) {
+            if (!definedVars.contains(credVar) && impl.contains(credVar)) {
+                String defaultVal = "serviceAccountJson".equals(credVar) ? "\"{}\"" : "\"\"";
+                if (definedVars.contains("credentialAlias")) {
+                    impl = "        String " + credVar + " = (endpoint.getCredentialAlias() != null ? endpoint.getCredentialAlias() : " + defaultVal + ");\n" + impl;
+                } else {
+                    impl = "        String " + credVar + " = " + defaultVal + ";\n" + impl;
+                }
             }
-        }
-        if (!definedVars.contains("username") && impl.contains("username")) {
-            impl = "        String username = \"\";\n" + impl;
         }
 
         // GENERIC RULE 6B: Protect against any calls to endpoint.get<Param>() where Param was NOT declared in Endpoint.java

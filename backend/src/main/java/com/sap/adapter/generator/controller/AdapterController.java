@@ -149,12 +149,25 @@ public class AdapterController {
     @GetMapping("/adapters/build/{buildId}/download/esa")
     public ResponseEntity<Resource> downloadEsa(@PathVariable String buildId) {
         BuildJob job = mavenBuildWorkerService.getJob(buildId);
-        if (job == null || job.getInspectionReport() == null || job.getInspectionReport().getEsaPath() == null) {
-            return ResponseEntity.notFound().build();
+        File esaFile = null;
+
+        if (job != null && job.getInspectionReport() != null && job.getInspectionReport().getEsaPath() != null) {
+            esaFile = new File(job.getInspectionReport().getEsaPath());
         }
 
-        File esaFile = new File(job.getInspectionReport().getEsaPath());
-        if (!esaFile.exists()) {
+        if (esaFile == null || !esaFile.exists()) {
+            // Fallback: server might have restarted, scan the workspace directory on disk
+            Path targetDir = Paths.get(workspacesRootDir, buildId, "target");
+            File dir = targetDir.toFile();
+            if (dir.exists() && dir.isDirectory()) {
+                File[] files = dir.listFiles((d, name) -> name.endsWith(".esa"));
+                if (files != null && files.length > 0) {
+                    esaFile = files[0];
+                }
+            }
+        }
+
+        if (esaFile == null || !esaFile.exists()) {
             return ResponseEntity.notFound().build();
         }
 

@@ -147,7 +147,94 @@ public class AiRequirementParserService {
         } catch (Exception e) {
             LOG.warn("Claude AI Auto-Fix failed: {}", e.getMessage());
         }
-        return null;
+        return applyHeuristicAutoFix(errorLog, currentSpec);
+    }
+
+    public TargetMeta applyHeuristicAutoFix(String errorLog, AdapterSpecification currentSpec) {
+        if (currentSpec == null || currentSpec.getTarget() == null) {
+            return null;
+        }
+        TargetMeta target = currentSpec.getTarget();
+        String deps = target.getCustomDependencies() != null ? target.getCustomDependencies() : "";
+        String imports = target.getProducerImports() != null ? target.getProducerImports() : "";
+        String impl = target.getProducerImplementation() != null ? target.getProducerImplementation() : "";
+
+        boolean modified = false;
+
+        // 1. Fix invalid com.force.api groupId or missing Salesforce SDK
+        if (deps.contains("com.force.api") || (errorLog != null && errorLog.contains("force-rest-api"))) {
+            deps = deps.replaceAll("<groupId>com\\.force\\.api</groupId>", "<groupId>com.frejo</groupId>");
+            if (!deps.contains("httpclient")) {
+                deps += "\n    <dependency>\n      <groupId>org.apache.httpcomponents</groupId>\n      <artifactId>httpclient</artifactId>\n      <version>4.5.14</version>\n    </dependency>";
+            }
+            modified = true;
+        }
+
+        // 1b. Fix invalid Google Drive version hallucination (e.g. non-existent v3-rev20240815)
+        if (deps.contains("google-api-services-drive") || (errorLog != null && errorLog.contains("google-api-services-drive"))) {
+            if (deps.contains("v3-rev20240815") || (errorLog != null && errorLog.contains("v3-rev20240815"))) {
+                deps = deps.replaceAll("v3-rev20240815-[^<]+", "v3-rev20240809-2.0.0");
+                modified = true;
+            } else if (errorLog != null && errorLog.contains("Could not resolve dependencies")) {
+                deps = deps.replaceAll("(?s)(<artifactId>google-api-services-drive</artifactId>\\s*<version>)[^<]+(</version>)", "$1v3-rev20240809-2.0.0$2");
+                modified = true;
+            }
+        }
+
+        // 2. Strip duplicate jackson-databind if in customDependencies
+        if (deps.contains("jackson-databind")) {
+            deps = deps.replaceAll("(?s)<dependency>\\s*<groupId>com\\.fasterxml\\.jackson\\.core</groupId>\\s*<artifactId>jackson-databind</artifactId>.*?</dependency>", "");
+            modified = true;
+        }
+
+        // 3. Fix missing common imports reported in errorLog or implementation
+        if (errorLog != null || impl != null) {
+            if ((errorLog != null && errorLog.contains("IOException")) && !imports.contains("java.io.IOException")) {
+                imports += "\nimport java.io.IOException;";
+                modified = true;
+            }
+            if ((errorLog != null && errorLog.contains("GeneralSecurityException")) && !imports.contains("GeneralSecurityException")) {
+                imports += "\nimport java.security.GeneralSecurityException;";
+                modified = true;
+            }
+            if (((errorLog != null && errorLog.contains("ApiFuture")) || (impl != null && impl.contains("ApiFuture"))) && !imports.contains("ApiFuture")) {
+                imports += "\nimport com.google.api.core.ApiFuture;";
+                modified = true;
+            }
+            if (((errorLog != null && errorLog.contains("ExecutionException")) || (impl != null && impl.contains("ExecutionException"))) && !imports.contains("ExecutionException")) {
+                imports += "\nimport java.util.concurrent.ExecutionException;";
+                modified = true;
+            }
+        }
+
+        // 4. Fix common Java code hallucinations (e.g., duplicate variables, this.* references)
+        if (errorLog != null && errorLog.contains("cannot find symbol") && impl.contains("this.instanceUrl")) {
+            impl = impl.replace("this.instanceUrl", "instanceUrl");
+            modified = true;
+        }
+        if (errorLog != null && errorLog.contains("is already defined in method process") && impl.contains("String clientSecret =")) {
+            // Replace the second declaration with an assignment if it already exists
+            impl = impl.replaceFirst("(?s)String\\s+clientSecret\\s*=\\s*([^;]+;)(.*?)String\\s+clientSecret\\s*=", "String clientSecret = $1$2clientSecret =");
+            modified = true;
+        }
+        if (errorLog != null && errorLog.contains("is already defined in method process") && impl.contains("String token =")) {
+            impl = impl.replaceFirst("(?s)String\\s+token\\s*=\\s*([^;]+;)(.*?)String\\s+token\\s*=", "String token = $1$2token =");
+            modified = true;
+        }
+
+        if (modified) {
+            LOG.info("Heuristic auto-fix applied successfully for target: {}", target.getTechnology());
+            TargetMeta fixed = new TargetMeta();
+            fixed.setTechnology(target.getTechnology());
+            fixed.setCategory(target.getCategory());
+            fixed.setCustomDependencies(deps);
+            fixed.setExcludedImports(target.getExcludedImports());
+            fixed.setProducerImports(imports);
+            fixed.setProducerImplementation(impl);
+            return fixed;
+        }
+
+        return target;
     }
 
     private String buildAutoFixPrompt(String errorLog, AdapterSpecification currentSpec) {
@@ -173,6 +260,12 @@ public class AiRequirementParserService {
 
                 Analyze the exact compilation/build error.
                 Fix missing imports, invalid method calls, duplicate variable declarations, or missing Maven dependencies.
+                
+                CRITICAL RULES:
+                1. If a dependency failed to download ("Could not find artifact ... in central"), verify the exact groupId/artifactId or replace it with standard Apache HttpClient ('org.apache.httpcomponents:httpclient:4.5.14'). For Salesforce REST, use 'com.frejo:force-rest-api:0.0.45' or standard Apache HttpClient. Never use 'com.force.api:force-rest-api'. For Google Drive API, use known version 'v3-rev20240809-2.0.0'. Never hallucinate unreleased dates like 'v3-rev20240815-2.0.0'.
+                2. Do not include jackson-databind or slf4j in customDependencies (they are already provided by the base POM).
+                3. Ensure all Java classes used in producerImplementation (e.g. IOException) are explicitly imported in producerImports.
+                
                 Return ONLY valid JSON matching this structure (no markdown, no preamble):
                 {
                   "technology": "%s",
@@ -302,9 +395,20 @@ public class AiRequirementParserService {
                      * `body` (String — raw payload, use `body.getBytes(StandardCharsets.UTF_8)`)
                      * `data` (Map<String, Object> — parsed JSON map)
                      * `LOG` (SLF4J Logger)
-                     * Connection parameters as String variables (e.g. `brokerUrl`, `topic`, `clientId`, `qos`, `username`, `password`)
+                     * Connection parameters as String variables (e.g. `brokerUrl`, `topic`, `qos`)
+                   - CREDENTIALS (ZERO RAW CREDENTIALS POLICY): If the target system requires authentication (username, password, client_id, client_secret, API key), DO NOT declare them as connection parameters! Instead, declare a SINGLE connection parameter named `credentialAlias` of type `secure-alias`. Then, inside `producerImplementation`, retrieve the credentials dynamically using the SAP SecureStore API:
+                     For Username/Password:
+                     `com.sap.it.api.securestore.UserCredential cred = com.sap.it.api.ITApiFactory.getApi(com.sap.it.api.securestore.SecureStoreService.class, null).getUserCredential(endpoint.getCredentialAlias());`
+                     `String username = cred.getUsername(); String password = new String(cred.getPassword());`
+                     For ClientID/Secret:
+                     `com.sap.it.api.securestore.OAuth2ClientCredential oauth = com.sap.it.api.ITApiFactory.getApi(com.sap.it.api.securestore.SecureStoreService.class, null).getOAuth2ClientCredential(endpoint.getCredentialAlias());`
+                     `String clientId = oauth.getClientId(); String clientSecret = new String(oauth.getClientSecret());`
+                     For API Key/Token:
+                     `com.sap.it.api.securestore.UserCredential cred = com.sap.it.api.ITApiFactory.getApi(com.sap.it.api.securestore.SecureStoreService.class, null).getUserCredential(endpoint.getCredentialAlias());`
+                     `String token = new String(cred.getPassword());`
                    - CLEANUP: Always disconnect and close client instances before returning from `process()`.
                 5. Connection parameters: Generate 3-6 parameters specific to the target technology. For any boolean flag parameters (e.g. `cleanSession`, `useSsl`, `autoReconnect`), set `"type": "boolean"` and `"defaultValue": "true"` or `"false"` so SAP Integration Suite UI renders a native Checkbox control.
+                6. ZERO-RAW-CREDENTIALS POLICY (MANDATORY): In SAP Cloud Integration (CPI), NEVER ask for raw passwords, raw private keys, or raw JSON files. All authentication MUST use a Credential Alias parameter (`"type": "secure-alias"`, `"name": "credentialAlias"`, `"label": "Credential Alias"`, `"defaultValue": "SAP_SECURE_ALIAS"`, `"description": "Deployed Security Material alias in SAP Cloud Integration").
 
                 User Requirement Prompt: """ + userPrompt;
     }
@@ -328,7 +432,32 @@ public class AiRequirementParserService {
         if (text.isBlank()) return null;
 
         text = stripJsonMarkdown(text);
-        return objectMapper.readValue(text.trim(), AdapterSpecification.class);
+        AdapterSpecification spec = objectMapper.readValue(text.trim(), AdapterSpecification.class);
+
+        // Normalize parameters: enforce Zero Raw Credentials Policy
+        if (spec != null && spec.getConnection() != null && spec.getConnection().getParameters() != null) {
+            for (ConnectionParameter p : spec.getConnection().getParameters()) {
+                String name = p.getName() != null ? p.getName().toLowerCase() : "";
+                boolean isSensitive = "secure-alias".equalsIgnoreCase(p.getType())
+                        || name.contains("password")
+                        || name.contains("secret")
+                        || name.contains("key")
+                        || name.contains("token")
+                        || name.contains("credential")
+                        || name.contains("serviceaccount");
+                if (isSensitive) {
+                    p.setType("secure-alias");
+                    if (p.getDefaultValue() == null || p.getDefaultValue().isBlank()) {
+                        p.setDefaultValue("SAP_SECURE_ALIAS");
+                    }
+                    if (p.getDescription() == null || p.getDescription().isBlank() || !p.getDescription().toLowerCase().contains("alias")) {
+                        p.setDescription("SAP Cloud Integration Security Material alias (Zero Raw Credentials Policy)");
+                    }
+                }
+            }
+        }
+
+        return spec;
     }
 
     private Map<String, Object> buildDynamicFallback(String userPrompt) {
