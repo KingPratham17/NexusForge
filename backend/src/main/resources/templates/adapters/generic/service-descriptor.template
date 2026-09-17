@@ -1,1 +1,1 @@
-class={{packagePath}}.{{adapterClassName}}Component
+class=${packagePath}.${adapterClassName}Component

@@ -9,6 +9,7 @@ public class ConnectionParameter {
     private String name;
     private String label;
     private String type; // string, secure-alias, select, boolean, integer
+    private java.util.List<String> options;
     private boolean required;
 
     @JsonAlias({"default", "defaultValue"})  // Claude returns "default", we use "defaultValue"
@@ -44,4 +45,7 @@ public class ConnectionParameter {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public java.util.List<String> getOptions() { return options; }
+    public void setOptions(java.util.List<String> options) { this.options = options; }
 }

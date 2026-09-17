@@ -6,6 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.sap.adapter.generator.registry.TechnologyRegistry;
+import com.sap.adapter.generator.plugin.TechnologyPlugin;
+import com.sap.adapter.generator.plugin.TemplateDefinition;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -30,18 +34,28 @@ public class AdapterGeneratorService {
 
     private static final String TEMPLATES = "/templates/adapters/generic/";
 
+    @Autowired
+    private TechnologyRegistry registry;
+
     public Map<String, String> generateProjectSources(AdapterSpecification spec, Path workspaceDir) throws Exception {
         LOG.info("Generating project dynamically for adapter '{}' (scheme={}, target={}) in {}",
                 spec.getAdapter().getName(), spec.getAdapter().getScheme(),
                 spec.getTarget() != null ? spec.getTarget().getTechnology() : "unknown",
                 workspaceDir);
 
-        Path workspacesRoot = workspaceDir.getParent();
-        pruneOldWorkspaces(workspacesRoot, workspaceDir);
-        Files.createDirectories(workspaceDir);
+        pruneOldWorkspaces(workspaceDir.getParent());
 
-        Map<String, String> ctx = buildContext(spec);
         Map<String, String> generatedFiles = new LinkedHashMap<>();
+        Map<String, String> ctx = buildContext(spec);
+
+        TechnologyPlugin plugin = null;
+        if (spec.getTarget() != null && spec.getTarget().getTechnology() != null) {
+            plugin = registry.getPluginById(spec.getTarget().getTechnology()).orElse(null);
+        }
+
+        if (plugin != null) {
+            ctx.putAll(plugin.getPluginContext(spec));
+        }
 
         String packageDirStr = ctx.get("packagePath").replace('.', '/');
         Path javaSrcDir = workspaceDir.resolve("src/main/java/" + packageDirStr);
@@ -65,68 +79,85 @@ public class AdapterGeneratorService {
         Files.createDirectories(componentFolder);
         Files.createDirectories(libsFolder);
 
-        String cls = ctx.get("adapterClassName");
+        List<TemplateDefinition> templates = (plugin != null) ? plugin.getTemplates(spec) : Collections.emptyList();
 
-        // 1. Component.java
-        write(generatedFiles, javaSrcDir.resolve(cls + "Component.java"),
-                render("component.java.template", ctx),
-                cls + "Component.java");
+        if (!templates.isEmpty()) {
+            LOG.info("Using plugin-provided templates for {}...", spec.getTarget().getTechnology());
+            for (TemplateDefinition td : templates) {
+                String rendered = renderTemplateDynamic(td.getSourcePath(), ctx);
+                Path destPath = workspaceDir.resolve(td.getDestinationPath());
+                Files.createDirectories(destPath.getParent());
+                write(generatedFiles, destPath, rendered, td.getDestinationPath());
+            }
+        } else {
+            LOG.info("Using generic fallback templates...");
+            String cls = ctx.get("adapterClassName");
 
-        // 2. Endpoint.java
-        write(generatedFiles, javaSrcDir.resolve(cls + "Endpoint.java"),
-                render("endpoint.java.template", ctx),
-                cls + "Endpoint.java");
+            // 1. Component.java
+            write(generatedFiles, javaSrcDir.resolve(cls + "Component.java"),
+                    render("component.java.template", ctx),
+                    cls + "Component.java");
 
-        // 3. Producer.java
-        write(generatedFiles, javaSrcDir.resolve(cls + "Producer.java"),
-                render("producer.java.template", ctx),
-                cls + "Producer.java");
+            // 2. Endpoint.java
+            write(generatedFiles, javaSrcDir.resolve(cls + "Endpoint.java"),
+                    render("endpoint.java.template", ctx),
+                    cls + "Endpoint.java");
 
-        // 4. Camel service descriptor
-        String scheme = ctx.get("scheme");
-        write(generatedFiles, serviceDir.resolve(scheme),
-                render("service-descriptor.template", ctx),
-                "META-INF/services/org/apache/camel/component/" + scheme);
+            // 3. Producer and/or Consumer
+            String direction = spec.getAdapter().getDirection();
+            boolean isSender = "sender".equalsIgnoreCase(direction) || "both".equalsIgnoreCase(direction);
+            boolean isReceiver = "receiver".equalsIgnoreCase(direction) || "both".equalsIgnoreCase(direction);
 
-        // 5. metadata.xml
-        String metadataContent = render("metadata.xml.template", ctx);
-        write(generatedFiles, rootMetadataDir.resolve("metadata.xml"), metadataContent, "metadata/metadata.xml");
-        Files.writeString(resMetadataDir.resolve("metadata.xml"), metadataContent, StandardCharsets.UTF_8);
+            if (isSender) {
+                write(generatedFiles, javaSrcDir.resolve(cls + "Consumer.java"),
+                        render("consumer.java.template", ctx),
+                        cls + "Consumer.java");
+            }
+            if (isReceiver) {
+                write(generatedFiles, javaSrcDir.resolve(cls + "Producer.java"),
+                        render("producer.java.template", ctx),
+                        cls + "Producer.java");
+            }
 
-        // 6. SUBSYSTEM.MF
-        String subsystemContent = render("SUBSYSTEM.MF.template", ctx);
-        write(generatedFiles, rootOsgiInfDir.resolve("SUBSYSTEM.MF"), subsystemContent, "OSGI-INF/SUBSYSTEM.MF");
-        Files.writeString(resOsgiInfDir.resolve("SUBSYSTEM.MF"), subsystemContent, StandardCharsets.UTF_8);
+            // 4. Camel service descriptor
+            String scheme = ctx.get("scheme");
+            write(generatedFiles, serviceDir.resolve(scheme),
+                    render("service-descriptor.template", ctx),
+                    "META-INF/services/org/apache/camel/component/" + scheme);
 
-        // 7. config.adk
-        write(generatedFiles, workspaceDir.resolve("config.adk"),
-                render("config.adk.template", ctx),
-                "config.adk");
+            // 5. metadata.xml
+            String metadataContent = render("metadata.xml.template", ctx);
+            write(generatedFiles, rootMetadataDir.resolve("metadata.xml"), metadataContent, "metadata/metadata.xml");
+            Files.writeString(resMetadataDir.resolve("metadata.xml"), metadataContent, StandardCharsets.UTF_8);
 
-        // 8. pom.xml
-        write(generatedFiles, workspaceDir.resolve("pom.xml"),
-                render("pom.xml.template", ctx),
-                "pom.xml");
+            // 6. SUBSYSTEM.MF
+            String subsystemContent = render("SUBSYSTEM.MF.template", ctx);
+            write(generatedFiles, rootOsgiInfDir.resolve("SUBSYSTEM.MF"), subsystemContent, "OSGI-INF/SUBSYSTEM.MF");
+            Files.writeString(resOsgiInfDir.resolve("SUBSYSTEM.MF"), subsystemContent, StandardCharsets.UTF_8);
+
+            // 7. config.adk
+            write(generatedFiles, workspaceDir.resolve("config.adk"),
+                    render("config.adk.template", ctx),
+                    "config.adk");
+
+            // 8. pom.xml
+            write(generatedFiles, workspaceDir.resolve("pom.xml"),
+                    render("pom.xml.template", ctx),
+                    "pom.xml");
+        }
+
+
 
         LOG.info("Generated {} source files in {}", generatedFiles.size(), workspaceDir);
         return generatedFiles;
     }
 
-    private void pruneOldWorkspaces(Path workspacesRoot, Path currentWorkspaceDir) {
+    private void pruneOldWorkspaces(Path workspacesRoot) {
         if (workspacesRoot == null || !Files.exists(workspacesRoot))
             return;
         try (Stream<Path> stream = Files.list(workspacesRoot)) {
-            long threshold = System.currentTimeMillis() - (2L * 60 * 60 * 1000); // 2 hours old
             stream.filter(Files::isDirectory)
                     .filter(p -> p.getFileName().toString().startsWith("build-"))
-                    .filter(p -> !p.equals(currentWorkspaceDir))
-                    .filter(p -> {
-                        try {
-                            return Files.getLastModifiedTime(p).toMillis() < threshold;
-                        } catch (Exception e) {
-                            return false;
-                        }
-                    })
                     .forEach(p -> {
                         try {
                             deleteDirectoryRecursively(p);
@@ -192,8 +223,7 @@ public class AdapterGeneratorService {
                 ? spec.getTarget().getProducerImports()
                 : "";
 
-        StringBuilder importsBuilder = new StringBuilder(rawProducerImports);
-        importsBuilder.append("\nimport java.nio.charset.StandardCharsets;\nimport javax.net.ssl.SSLContext;\nimport javax.net.ssl.SSLSocketFactory;\n");
+        String producerImports = rawProducerImports + "\nimport java.nio.charset.StandardCharsets;\nimport javax.net.ssl.SSLContext;\nimport javax.net.ssl.SSLSocketFactory;\n";
 
         List<ConnectionParameter> params = getParams(spec);
 
@@ -204,28 +234,162 @@ public class AdapterGeneratorService {
                                 + (spec.getTarget() != null ? spec.getTarget().getTechnology() : "Target System")
                                 + "\");";
 
-        // Auto-inject commonly missed SDK class imports if referenced in producer code
-        if (rawProducerImpl.contains("ApiFuture") && !importsBuilder.toString().contains("ApiFuture")) {
-            importsBuilder.append("import com.google.api.core.ApiFuture;\n");
-        }
-        if (rawProducerImpl.contains("ExecutionException") && !importsBuilder.toString().contains("ExecutionException")) {
-            importsBuilder.append("import java.util.concurrent.ExecutionException;\n");
-        }
-        if (rawProducerImpl.contains("TimeoutException") && !importsBuilder.toString().contains("TimeoutException")) {
-            importsBuilder.append("import java.util.concurrent.TimeoutException;\n");
-        }
-        if (rawProducerImpl.contains("TimeUnit") && !importsBuilder.toString().contains("TimeUnit")) {
-            importsBuilder.append("import java.util.concurrent.TimeUnit;\n");
-        }
-
-        String producerImports = importsBuilder.toString();
-
         String producerImpl = sanitizeProducerImplementation(rawProducerImpl, params);
+
+        String rawConsumerImports = (spec.getTarget() != null && spec.getTarget().getConsumerImports() != null)
+                ? spec.getTarget().getConsumerImports()
+                : "";
+        String consumerImports = rawConsumerImports + "\nimport java.nio.charset.StandardCharsets;\nimport javax.net.ssl.SSLContext;\nimport javax.net.ssl.SSLSocketFactory;\n";
+
+        String rawConsumerImpl = (spec.getTarget() != null && spec.getTarget().getConsumerImplementation() != null
+                && !spec.getTarget().getConsumerImplementation().isBlank())
+                        ? spec.getTarget().getConsumerImplementation()
+                        : "        LOG.info(\"Polling logic for "
+                                + (spec.getTarget() != null ? spec.getTarget().getTechnology() : "Target System")
+                                + "\");";
+        String consumerImpl = sanitizeProducerImplementation(rawConsumerImpl, params);
+
+        String direction = spec.getAdapter().getDirection();
+        String endpointProducer = "";
+        String endpointConsumer = "";
+        
+        String senderVariant = "";
+        String receiverVariant = "";
+
+        if ("sender".equalsIgnoreCase(direction) || "both".equalsIgnoreCase(direction)) {
+            endpointConsumer = "    @Override\n" +
+                    "    public Consumer createConsumer(Processor processor) throws Exception {\n" +
+                    "        return new " + cls + "Consumer(this, processor);\n" +
+                    "    }";
+            if ("sender".equalsIgnoreCase(direction)) {
+                endpointProducer = "    @Override\n" +
+                        "    public Producer createProducer() throws Exception {\n" +
+                        "        throw new UnsupportedOperationException(\"Adapter does not support producing messages\");\n" +
+                        "    }";
+            }
+            
+            senderVariant = "    <Variant VariantName=\"${adapterName} Sender\"\n" +
+                    "             VariantId=\"ctype::AdapterVariant/cname::${adapterName}/vendor::${vendor}/tp::${scheme}/mp::${scheme}/direction::Sender\"\n" +
+                    "             MetadataVersion=\"2.0\"\n" +
+                    "             gen:RuntimeComponentBaseUri=\"${scheme}\"\n" +
+                    "             AttachmentBehavior=\"Preserve\">\n" +
+                    "        <OutputContent Cardinality=\"1\" Scope=\"outsidepool\" MessageCardinality=\"1\" isStreaming=\"false\">\n" +
+                    "            <Content>\n" +
+                    "                <ContentType>Any</ContentType>\n" +
+                    "                <Schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\"/>\n" +
+                    "            </Content>\n" +
+                    "        </OutputContent>\n" +
+                    "        <Tab id=\"connection\">\n" +
+                    "            <GuiLabels guid=\"947ffd8b-60ab-4a87-8f97-772697aa14f5\">\n" +
+                    "                <Label language=\"EN\">Connection</Label>\n" +
+                    "                <Label language=\"DE\">Connection</Label>\n" +
+                    "            </GuiLabels>\n" +
+                    "            <AttributeGroup id=\"defaultUriParameter\">\n" +
+                    "                <Name xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\">URI Setting</Name>\n" +
+                    "                <GuiLabels guid=\"b2b1d216-254a-474b-bb0e-35d60a9e1fd2\">\n" +
+                    "                    <Label language=\"EN\">URI Setting</Label>\n" +
+                    "                    <Label language=\"DE\">URI Setting</Label>\n" +
+                    "                </GuiLabels>\n" +
+                    "            </AttributeGroup>\n" +
+                    "            <AttributeGroup id=\"${adapterName}Endpoint\">\n" +
+                    "                <Name xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\">${adapterName}</Name>\n" +
+                    "                <GuiLabels guid=\"9ec2c525-219c-4792-8206-5b67001fbbff\">\n" +
+                    "                    <Label language=\"EN\">${adapterName} Endpoint</Label>\n" +
+                    "                    <Label language=\"DE\">${adapterName} Endpoint</Label>\n" +
+                    "                </GuiLabels>\n" +
+                    "${senderAttributeReferences}\n" +
+                    "            </AttributeGroup>\n" +
+                    "        </Tab>\n" +
+                    "        <ReferencedComponents>\n" +
+                    "            <ReferencedComponent>\n" +
+                    "                <ReferencedComponentId>ctype::ExtensionVariant/cname::sap:Scheduler/version::1.0</ReferencedComponentId>\n" +
+                    "                <AttributeMetadataConfiguration>\n" +
+                    "                    <Name>scheduleKey</Name>\n" +
+                    "                    <AttributeBehavior>Scheduler_ScheduleOnDay,Scheduler_ScheduleToRecur</AttributeBehavior>\n" +
+                    "                </AttributeMetadataConfiguration>\n" +
+                    "            </ReferencedComponent>\n" +
+                    "        </ReferencedComponents>\n" +
+                    "    </Variant>";
+        }
+
+        if ("receiver".equalsIgnoreCase(direction) || "both".equalsIgnoreCase(direction)) {
+            endpointProducer = "    @Override\n" +
+                    "    public Producer createProducer() throws Exception {\n" +
+                    "        return new " + cls + "Producer(this);\n" +
+                    "    }";
+            if ("receiver".equalsIgnoreCase(direction)) {
+                endpointConsumer = "    @Override\n" +
+                        "    public Consumer createConsumer(Processor processor) throws Exception {\n" +
+                        "        throw new UnsupportedOperationException(\"Adapter does not support consuming messages\");\n" +
+                        "    }";
+            }
+            
+            receiverVariant = "    <Variant VariantName=\"${adapterName} Receiver\"\n" +
+                    "             VariantId=\"ctype::AdapterVariant/cname::${adapterName}/vendor::${vendor}/tp::${scheme}/mp::${scheme}/direction::Receiver\"\n" +
+                    "             IsRequestResponse=\"true\"\n" +
+                    "             MetadataVersion=\"2.0\"\n" +
+                    "             gen:RuntimeComponentBaseUri=\"${scheme}\"\n" +
+                    "             AttachmentBehavior=\"Preserve\">\n" +
+                    "        <InputContent Cardinality=\"1\" Scope=\"outsidepool\" MessageCardinality=\"1\" isStreaming=\"false\">\n" +
+                    "            <Content>\n" +
+                    "                <ContentType>Any</ContentType>\n" +
+                    "                <Schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\"/>\n" +
+                    "            </Content>\n" +
+                    "        </InputContent>\n" +
+                    "        <OutputContent Cardinality=\"1\" Scope=\"outsidepool\" MessageCardinality=\"1\" isStreaming=\"false\">\n" +
+                    "            <Content>\n" +
+                    "                <ContentType>Any</ContentType>\n" +
+                    "                <Schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\"/>\n" +
+                    "            </Content>\n" +
+                    "        </OutputContent>\n" +
+                    "        <Tab id=\"connection\">\n" +
+                    "            <GuiLabels guid=\"ac70982c-5d11-4b97-95c5-2d59cb4f7754\">\n" +
+                    "                <Label language=\"EN\">Connection</Label>\n" +
+                    "                <Label language=\"DE\">Connection</Label>\n" +
+                    "            </GuiLabels>\n" +
+                    "            <AttributeGroup id=\"defaultUriParameter\">\n" +
+                    "                <Name xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\">URI Setting</Name>\n" +
+                    "                <GuiLabels guid=\"304decfc-5103-4f4b-a258-8c81f7b8663f\">\n" +
+                    "                    <Label language=\"EN\">URI Setting</Label>\n" +
+                    "                    <Label language=\"DE\">URI Setting</Label>\n" +
+                    "                </GuiLabels>\n" +
+                    "            </AttributeGroup>\n" +
+                    "            <AttributeGroup id=\"${adapterName}Endpoint\">\n" +
+                    "                <Name xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"xs:string\">${adapterName}</Name>\n" +
+                    "                <GuiLabels guid=\"820ea6ce-9811-4375-9c16-989c8086af14\">\n" +
+                    "                    <Label language=\"EN\">${adapterName} Endpoint</Label>\n" +
+                    "                    <Label language=\"DE\">${adapterName} Endpoint</Label>\n" +
+                    "                </GuiLabels>\n" +
+                    "${receiverAttributeReferences}\n" +
+                    "            </AttributeGroup>\n" +
+                    "        </Tab>\n" +
+                    "    </Variant>";
+        }
+        
+        if (!senderVariant.isEmpty()) {
+            senderVariant = senderVariant.replace("${adapterName}", name)
+                                         .replace("${vendor}", vendor)
+                                         .replace("${scheme}", scheme)
+                                         .replace("${senderAttributeReferences}", buildAttributeReferences(params));
+        }
+        if (!receiverVariant.isEmpty()) {
+            receiverVariant = receiverVariant.replace("${adapterName}", name)
+                                             .replace("${vendor}", vendor)
+                                             .replace("${scheme}", scheme)
+                                             .replace("${receiverAttributeReferences}", buildAttributeReferences(params));
+        }
+
+        ctx.put("createProducerMethod", endpointProducer);
+        ctx.put("createConsumerMethod", endpointConsumer);
+        ctx.put("senderVariant", senderVariant);
+        ctx.put("receiverVariant", receiverVariant);
 
         ctx.put("customDependencies", customDependencies);
         ctx.put("excludedImports", excludedImports);
         ctx.put("producerImports", producerImports);
         ctx.put("producerImplementation", producerImpl);
+        ctx.put("consumerImports", consumerImports);
+        ctx.put("consumerImplementation", consumerImpl);
 
         ctx.put("uriParamFields", buildUriParamFields(params));
         ctx.put("uriParamGettersSetters", buildGettersSetters(params));
@@ -250,28 +414,18 @@ public class AdapterGeneratorService {
 
         // GENERIC RULE 1: Strip any org.apache.camel:camel-* dependencies.
         // The Camel core is already provided by the SAP ADK parent POM.
+        // AI frequently hallucinates camel wrapper modules that were removed in Camel
+        // 3.x.
         deps = deps.replaceAll(
                 "(?s)<dependency>\\s*<groupId>org\\.apache\\.camel</groupId>\\s*<artifactId>camel-[^<]+</artifactId>.*?</dependency>",
                 "");
 
         // GENERIC RULE 2: Strip any provided-scope or test-scope dependencies.
-        deps = deps.replaceAll("(?s)<dependency>[^<]*<scope>(?:provided|test)</scope>.*?</dependency>", "");
+        // Our bundle needs compile-scope only; provided/test scopes cause OSGi
+        // packaging issues.
+        deps = deps.replaceAll("(?s)<dependency>.*?<scope>(?:provided|test)</scope>.*?</dependency>", "");
 
-        // GENERIC RULE 3: Strip duplicate jackson-databind (already provided in base pom at 2.15.4)
-        deps = deps.replaceAll(
-                "(?s)<dependency>\\s*<groupId>com\\.fasterxml\\.jackson\\.core</groupId>\\s*<artifactId>jackson-databind</artifactId>.*?</dependency>",
-                "");
-
-        // GENERIC RULE 4: Strip duplicate slf4j or log4j dependencies (already in parent pom)
-        deps = deps.replaceAll(
-                "(?s)<dependency>\\s*<groupId>(?:org\\.slf4j|log4j)</groupId>.*?</dependency>",
-                "");
-
-        // GENERIC RULE 5: Fix known invalid Maven Central coordinates from AI hallucination
-        deps = deps.replaceAll("<groupId>com\\.force\\.api</groupId>", "<groupId>com.frejo</groupId>");
-        deps = deps.replaceAll("v3-rev20240815-[^<]+", "v3-rev20240809-2.0.0");
-
-        // GENERIC RULE 6: Clean up leftover blank lines
+        // GENERIC RULE 3: Clean up leftover blank lines from stripped dependencies
         deps = deps.replaceAll("(?m)^\\s*$\\n", "");
 
         return deps;
@@ -310,99 +464,36 @@ public class AdapterGeneratorService {
             }
         }
 
-        // GENERIC RULE 2: Fix "data.getBytes()" — `data` is Map<String, Object>, not
-        // String.
-        // The String payload variable is `body`, so getBytes() calls should use `body`.
-        impl = impl.replaceAll("\\bdata\\.getBytes\\(", "body.getBytes(");
+        // Payload parsing is strictly deferred to the AI.
+        // We no longer attempt to auto-correct data.getBytes() or body.getXXX()
+        // since the generic template no longer enforces Map/String types.
 
-        // GENERIC RULE 3: Fix "body.getSomeMethod()" calls — `body` is a plain String,
-        // so calls to nonexistent
-        // methods like body.getTopic(), body.getKey(), body.getCollection() should be
-        // replaced with Map lookups.
-        // Do NOT touch valid String methods like body.getBytes() or body.getClass()!
-        impl = impl.replaceAll("\\bbody\\.get(?!(?:Bytes|Class)\\b)(\\w+)\\(\\)",
-                "(data != null && data.containsKey(\"$1\".toLowerCase()) ? String.valueOf(data.get(\"$1\".toLowerCase())) : \"\")");
-
-        // GENERIC RULE 4: Auto-wrap String connection params passed to methods expecting int or numeric comparisons.
+        // GENERIC RULE 4: Auto-wrap String connection params passed to methods
+        // expecting int.
+        // Pattern: any method argument matching a known String param name in an int
+        // context
+        // e.g. client.publish(topic, payload, qosLevel, false) →
+        // Integer.parseInt(qosLevel)
+        // We detect: ", <paramName>," or ", <paramName>)" where paramName is a known
+        // String connection param
         if (params != null) {
             for (ConnectionParameter p : params) {
                 if ("integer".equalsIgnoreCase(p.getType()) || "int".equalsIgnoreCase(p.getType())) {
                     continue; // already int type, no conversion needed
                 }
                 String varName = toCamelCase(p.getName());
-                // Only wrap params whose names suggest numeric values (port, qos, timeout, retries, limit, etc.)
+                // Only wrap params whose names suggest numeric values (port, qos, timeout,
+                // retries, etc.)
                 if (varName.toLowerCase().matches(
                         ".*(port|qos|timeout|retries|retry|count|size|level|interval|batch|limit|ttl|max|min|num|delay).*")) {
-                    // Wrap binary comparisons with numeric literals: e.g. "limit > 0" -> "Integer.parseInt(limit) > 0"
-                    impl = impl.replaceAll("\\b" + varName + "\\s*([><!=]=?)\\s*([0-9]+)", "(Integer.parseInt(" + varName + ") $1 $2)");
-                    impl = impl.replaceAll("([0-9]+)\\s*([><!=]=?)\\s*" + varName + "\\b", "($1 $2 Integer.parseInt(" + varName + "))");
-
-                    // Wrap single-arg method calls: e.g. "query.limit(limit)" -> "query.limit(Integer.parseInt(limit))"
-                    impl = impl.replaceAll("(?<=[a-zA-Z0-9_]\\()\\s*" + varName + "\\s*\\)", "Integer.parseInt(" + varName + "))");
-
-                    // Wrap multi-arg method calls: ", limit," or ", limit)"
+                    // Wrap standalone usage: ", varName," or ", varName)"
                     impl = impl.replaceAll(",\\s*" + varName + "\\s*,", ", Integer.parseInt(" + varName + "),");
                     impl = impl.replaceAll(",\\s*" + varName + "\\s*\\)", ", Integer.parseInt(" + varName + "))");
                 }
             }
         }
 
-        // GENERIC RULE 5: Auto-normalize connection host/broker/server URIs to prepend
-        // "tcp://" if scheme is missing.
-        if (params != null) {
-            for (ConnectionParameter p : params) {
-                String varName = toCamelCase(p.getName());
-                if (varName.toLowerCase().matches(".*(broker|host|server|url|uri).*")) {
-                    impl = "        if (" + varName + " != null && !" + varName + ".contains(\"://\")) {\n" +
-                            "            " + varName + " = \"tcp://\" + " + varName + ";\n" +
-                            "        }\n" + impl;
-                    break; // Normalize primary broker/server parameter
-                }
-            }
-        }
 
-        // GENERIC RULE 6: Provide fallback declarations for common credential variables
-        // (serviceAccountJson, password, username, apiKey, token, secretKey, etc.) if referenced in producer code but not explicitly in params.
-        Set<String> definedVars = new HashSet<>();
-        if (params != null) {
-            for (ConnectionParameter p : params) {
-                definedVars.add(toCamelCase(p.getName()));
-            }
-        }
-
-        List<String> credentialFallbacks = List.of(
-            "serviceAccountJson", "password", "username", "apiKey", "token", "secretKey", "clientSecret", "authToken", "privateKey"
-        );
-        for (String credVar : credentialFallbacks) {
-            if (!definedVars.contains(credVar) && impl.contains(credVar)) {
-                String defaultVal = "serviceAccountJson".equals(credVar) ? "\"{}\"" : "\"\"";
-                if (definedVars.contains("credentialAlias")) {
-                    impl = "        String " + credVar + " = (endpoint.getCredentialAlias() != null ? endpoint.getCredentialAlias() : " + defaultVal + ");\n" + impl;
-                } else {
-                    impl = "        String " + credVar + " = " + defaultVal + ";\n" + impl;
-                }
-            }
-        }
-
-        // GENERIC RULE 6B: Protect against any calls to endpoint.get<Param>() where Param was NOT declared in Endpoint.java
-        // Replaces endpoint.getNonExistentParam() with "" so the compiler doesn't fail with cannot find symbol
-        java.util.regex.Pattern endpointGetter = java.util.regex.Pattern.compile("endpoint\\.get([A-Za-z0-9_]+)\\(\\)");
-        java.util.regex.Matcher matcher = endpointGetter.matcher(impl);
-        StringBuilder safeImpl = new StringBuilder();
-        while (matcher.find()) {
-            String getterName = matcher.group(1);
-            String paramVar = Character.toLowerCase(getterName.charAt(0)) + getterName.substring(1);
-            if (!definedVars.contains(paramVar)) {
-                matcher.appendReplacement(safeImpl, "\"\"");
-            } else {
-                matcher.appendReplacement(safeImpl, matcher.group(0));
-            }
-        }
-        matcher.appendTail(safeImpl);
-        impl = safeImpl.toString();
-
-        // GENERIC RULE 7: Fix common method name misnomers in Java SDKs
-        impl = impl.replace(".setConnectTimeout(", ".setConnectionTimeout(");
 
         return impl;
     }
@@ -513,15 +604,44 @@ public class AdapterGeneratorService {
         return sb.toString().stripTrailing();
     }
 
-    private String render(String templateName, Map<String, String> ctx) throws Exception {
+    private String renderTemplateDynamic(String path, Map<String, String> context) throws Exception {
+        try (InputStream is = getClass().getResourceAsStream(path)) {
+            if (is == null) {
+                LOG.error("Template not found: {}", path);
+                return "";
+            }
+            String template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            for (Map.Entry<String, String> entry : context.entrySet()) {
+                String key = "${" + entry.getKey() + "}";
+                String val = entry.getValue() != null ? entry.getValue() : "";
+                template = template.replace(key, val);
+            }
+            return template;
+        }
+    }
+
+    private String render(String templateName, Map<String, String> context) throws Exception {
         String path = TEMPLATES + templateName;
         InputStream is = getClass().getResourceAsStream(path);
         if (is == null) {
             throw new IllegalArgumentException("Template not found: " + path);
         }
         String template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-        for (Map.Entry<String, String> e : ctx.entrySet()) {
-            template = template.replace("{{" + e.getKey() + "}}", e.getValue());
+        for (Map.Entry<String, String> e : context.entrySet()) {
+            template = template.replace("${" + e.getKey() + "}", e.getValue());
+        }
+        return template;
+    }
+
+    private String renderCommon(String templateName, Map<String, String> context) throws Exception {
+        String path = "/templates/adapters/common/" + templateName;
+        InputStream is = getClass().getResourceAsStream(path);
+        if (is == null) {
+            throw new IllegalArgumentException("Template not found: " + path);
+        }
+        String template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        for (Map.Entry<String, String> e : context.entrySet()) {
+            template = template.replace("${" + e.getKey() + "}", e.getValue());
         }
         return template;
     }

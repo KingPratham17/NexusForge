@@ -1,77 +1,59 @@
 package com.sap.adapter.generator.controller;
 
-import com.sap.adapter.generator.model.auth.JwtResponse;
-import com.sap.adapter.generator.model.auth.LoginRequest;
-import com.sap.adapter.generator.model.auth.MessageResponse;
-import com.sap.adapter.generator.model.auth.SignupRequest;
-import com.sap.adapter.generator.model.entity.User;
+import com.sap.adapter.generator.controller.dto.JwtResponse;
+import com.sap.adapter.generator.controller.dto.LoginRequest;
+import com.sap.adapter.generator.controller.dto.MessageResponse;
+import com.sap.adapter.generator.controller.dto.SignupRequest;
+import com.sap.adapter.generator.model.User;
 import com.sap.adapter.generator.repository.UserRepository;
-import com.sap.adapter.generator.security.jwt.JwtUtils;
-import com.sap.adapter.generator.security.services.UserDetailsImpl;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sap.adapter.generator.security.JwtUtils;
+import com.sap.adapter.generator.security.UserDetailsImpl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping("/api/auth")
 public class AuthController {
 
-    @Autowired
-    AuthenticationManager authenticationManager;
+    private final AuthenticationManager authenticationManager;
+    private final UserRepository userRepository;
+    private final PasswordEncoder encoder;
+    private final JwtUtils jwtUtils;
 
-    @Autowired
-    UserRepository userRepository;
-
-    @Autowired
-    PasswordEncoder encoder;
-
-    @Autowired
-    JwtUtils jwtUtils;
+    public AuthController(AuthenticationManager authenticationManager, UserRepository userRepository,
+                          PasswordEncoder encoder, JwtUtils jwtUtils) {
+        this.authenticationManager = authenticationManager;
+        this.userRepository = userRepository;
+        this.encoder = encoder;
+        this.jwtUtils = jwtUtils;
+    }
 
     @PostMapping("/signin")
     public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest) {
-
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
+                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
         String jwt = jwtUtils.generateJwtToken(authentication);
 
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
 
-        return ResponseEntity.ok(new JwtResponse(jwt,
-                userDetails.getId(),
-                userDetails.getName(),
-                userDetails.getEmail(),
-                roles));
+        return ResponseEntity.ok(new JwtResponse(jwt, userDetails.getId(), userDetails.getUsername()));
     }
 
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@RequestBody SignupRequest signUpRequest) {
-        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse("Error: Email is already in use!"));
+        if (userRepository.existsByUsername(signUpRequest.getUsername())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Username is already taken!"));
         }
 
-        // Create new user's account
-        User user = new User(signUpRequest.getName(),
-                signUpRequest.getEmail(),
-                encoder.encode(signUpRequest.getPassword()));
-
+        User user = new User(signUpRequest.getUsername(), encoder.encode(signUpRequest.getPassword()));
         userRepository.save(user);
 
         return ResponseEntity.ok(new MessageResponse("User registered successfully!"));

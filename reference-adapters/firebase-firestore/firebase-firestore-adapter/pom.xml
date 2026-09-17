@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.poc.firebase</groupId>
+  <artifactId>firebase-firestore-adapter</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <packaging>bundle</packaging>
+
+  <name>${project.groupId}.${project.artifactId}</name>
+
+  <properties>
+    <camel.version>3.14.7</camel.version>
+    <adk.version>2.2.0</adk.version>
+    <generic.api.version>3.21.0</generic.api.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+
+    <!-- ========================================================= -->
+    <!-- SAP Adapter Development Kit                               -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>com.sap.cloud.adk</groupId>
+      <artifactId>com.sap.cloud.adk.build.archive</artifactId>
+      <version>${adk.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- ========================================================= -->
+    <!-- SAP Cloud Integration Generic API                         -->
+    <!-- Used for ITApiFactory / SecureStoreService                 -->
+    <!-- Supplied by Cloud Integration at runtime                   -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>com.sap.cloud.adk</groupId>
+      <artifactId>generic.api</artifactId>
+      <version>${generic.api.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- ========================================================= -->
+    <!-- Apache Camel                                               -->
+    <!-- Supplied by Cloud Integration runtime                      -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-core</artifactId>
+      <version>${camel.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- ========================================================= -->
+    <!-- Camel Testing                                              -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-test</artifactId>
+      <version>${camel.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- ========================================================= -->
+    <!-- Jackson                                                    -->
+    <!-- Used directly by Producer                                  -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.15.4</version>
+    </dependency>
+
+    <!-- ========================================================= -->
+    <!-- Google Cloud Firestore + Auth (direct, not via            -->
+    <!-- firebase-admin) — avoids pulling in Cloud Storage, the    -->
+    <!-- REST API client stack, and ALTS/XDS/GRPCLB transports     -->
+    <!-- that firebase-admin's full Admin SDK ships but this       -->
+    <!-- adapter never uses.                                       -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-firestore</artifactId>
+      <version>3.7.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.google.auth</groupId>
+      <artifactId>google-auth-library-oauth2-http</artifactId>
+      <version>1.12.1</version>
+    </dependency>
+
+    <!-- ========================================================= -->
+    <!-- SLF4J                                                       -->
+    <!-- Supplied by Cloud Integration runtime                      -->
+    <!-- ========================================================= -->
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>1.6.1</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <version>1.6.1</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <version>1.2.16</version>
+      <scope>test</scope>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+
+    <defaultGoal>install</defaultGoal>
+
+    <plugins>
+
+      <!-- ======================================================= -->
+      <!-- OSGi Component                                          -->
+      <!-- ======================================================= -->
+
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>5.1.9</version>
+        <extensions>true</extensions>
+
+        <configuration>
+
+          <instructions>
+
+            <!-- Bundle identity -->
+            <Bundle-ManifestVersion>2</Bundle-ManifestVersion>
+
+            <Bundle-SymbolicName>
+              ${project.artifactId}
+            </Bundle-SymbolicName>
+
+            <Bundle-Version>
+              ${project.version}
+            </Bundle-Version>
+
+            <!-- Export only our adapter classes -->
+            <Export-Package>
+              com.poc.firebase
+            </Export-Package>
+
+            <!-- ================================================= -->
+            <!-- Let bnd embed Firebase/Google deps AND generate  -->
+            <!-- a correct, explicit Bundle-ClassPath for them.   -->
+            <!-- Equinox does NOT expand "lib/*.jar" wildcards -   -->
+            <!-- every embedded jar must be listed by name, which -->
+            <!-- Embed-Dependency does automatically.             -->
+            <!-- ================================================= -->
+
+            <Embed-Dependency>
+              *;scope=compile|runtime
+            </Embed-Dependency>
+
+            <Embed-Transitive>
+              true
+            </Embed-Transitive>
+
+            <Embed-Directory>
+              lib
+            </Embed-Directory>
+
+            <Embed-StripGroup>
+              true
+            </Embed-StripGroup>
+
+            <!-- Keep normal Maven resources, including:         -->
+            <!-- META-INF/services/org/apache/camel/component/... -->
+            <Include-Resource>
+              {maven-resources}
+            </Include-Resource>
+
+            <!-- ================================================= -->
+            <!-- OSGi imports                                      -->
+            <!-- ================================================= -->
+
+            <Import-Package>
+
+              <!-- Embedded Firebase / Google dependency packages -->
+              !com.google.firebase.*,
+              !com.google.auth.*,
+              !com.google.cloud.*,
+              !com.google.api.*,
+              !com.google.protobuf.*,
+              !com.google.common.*,
+              !com.google.gson.*,
+              !io.grpc.*,
+              !io.netty.*,
+              !io.opencensus.*,
+              !io.perfmark.*,
+              !org.threeten.*,
+              !org.conscrypt.*,
+              !org.apache.http.*,
+              !com.fasterxml.jackson.*,
+
+              <!-- SAP runtime supplied -->
+              com.sap.it.api.*,
+
+              <!-- Java platform packages -->
+              javax.crypto,
+              javax.crypto.spec,
+              javax.net,
+              javax.net.ssl,
+              javax.naming,
+              javax.naming.directory,
+              javax.naming.ldap,
+              javax.security.auth.x500,
+              javax.security.cert,
+
+              <!-- Optional platform package -->
+              javax.servlet;resolution:=optional,
+
+              <!-- Cloud Integration runtime supplied -->
+              org.apache.camel.*,
+              org.slf4j.*
+
+            </Import-Package>
+
+          </instructions>
+
+        </configuration>
+      </plugin>
+
+      <!-- ======================================================= -->
+      <!-- Java Compiler                                           -->
+      <!-- SAP ADK supports Java 8 standard libraries              -->
+      <!-- ======================================================= -->
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>2.3.2</version>
+
+        <configuration>
+          <source>1.8</source>
+          <target>1.8</target>
+          <encoding>UTF-8</encoding>
+        </configuration>
+      </plugin>
+
+      <!-- ======================================================= -->
+      <!-- SAP ADK Build Plugin                                    -->
+      <!-- ======================================================= -->
+
+      <plugin>
+        <groupId>com.sap.cloud.adk</groupId>
+        <artifactId>com.sap.cloud.adk.build.archive</artifactId>
+        <version>${adk.version}</version>
+      </plugin>
+
+    </plugins>
+
+    <!-- ========================================================= -->
+    <!-- Plugin Management                                         -->
+    <!-- ========================================================= -->
+
+    <pluginManagement>
+
+      <plugins>
+
+        <plugin>
+          <groupId>com.sap.cloud.adk</groupId>
+          <artifactId>com.sap.cloud.adk.build.archive</artifactId>
+
+          <executions>
+
+            <execution>
+              <id>execute-checks</id>
+              <phase>package</phase>
+
+              <goals>
+                <goal>check</goal>
+              </goals>
+
+              <configuration>
+                <adapterProjectDirectory>
+                  ${project.basedir}
+                </adapterProjectDirectory>
+              </configuration>
+
+            </execution>
+
+            <execution>
+              <id>build-adapter</id>
+              <phase>install</phase>
+
+              <goals>
+                <goal>build</goal>
+              </goals>
+
+              <configuration>
+                <adapterProjectDirectory>
+                  ${project.basedir}
+                </adapterProjectDirectory>
+              </configuration>
+
+            </execution>
+
+          </executions>
+
+        </plugin>
+
+        <!-- Javadocs -->
+        <plugin>
+
+          <artifactId>maven-javadoc-plugin</artifactId>
+
+          <executions>
+
+            <execution>
+              <id>javadoc-jar</id>
+              <phase>generate-sources</phase>
+
+              <goals>
+                <goal>jar</goal>
+              </goals>
+            </execution>
+
+            <execution>
+              <id>aggregate-jar</id>
+              <phase>generate-sources</phase>
+
+              <goals>
+                <goal>aggregate-jar</goal>
+              </goals>
+
+              <inherited>false</inherited>
+            </execution>
+
+          </executions>
+
+        </plugin>
+
+      </plugins>
+
+    </pluginManagement>
+
+  </build>
+
+</project>

@@ -1,78 +1,228 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState } from 'react';
 import Header from './components/Header';
-import Generator from './pages/Generator';
-import Dashboard from './pages/Dashboard';
-import Profile from './pages/Profile';
-import { AuthContext } from './context/AuthContext';
-import { useContext } from 'react';
+import StepWizard from './components/StepWizard';
+import RequirementForm from './components/RequirementForm';
+import DynamicTechForm from './components/DynamicTechForm';
+import SpecificationViewer from './components/SpecificationViewer';
+import SourceCodeViewer from './components/SourceCodeViewer';
+import BuildConsole from './components/BuildConsole';
+import ArtifactInspector from './components/ArtifactInspector';
+import Login from './components/Login';
+import Signup from './components/Signup';
 
-import { GeneratorProvider } from './context/GeneratorContext';
-
-import LandingPage from './pages/LandingPage';
-
-// Protected Route Wrapper
-const ProtectedRoute = ({ children }) => {
-  const { token, loading } = useContext(AuthContext);
-  
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{
-          width: '36px',
-          height: '36px',
-          border: '3px solid #e2e8f0',
-          borderTopColor: '#2563eb',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite'
-        }}></div>
-      </div>
-    );
-  }
-
-  if (!token) {
-    // Redirect to home if not logged in
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
-};
+import {
+  analyzeRequirement,
+  generateAdapter,
+  triggerBuild,
+  fetchBuildStatus,
+  autoFixBuild
+} from './services/api';
 
 export default function App() {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [autoFixing, setAutoFixing] = useState(false);
+
+  // Authentication State
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
+  const [showSignup, setShowSignup] = useState(false);
+
+  const handleLogin = (userData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  // Workflow state — all driven by AI output
+  const [parsedResult, setParsedResult] = useState(null);
+  const [specification, setSpecification] = useState(null);
+  const [generatedResult, setGeneratedResult] = useState(null);
+  const [buildJob, setBuildJob] = useState(null);
+
+  // Step 1: Send prompt to AI, no technology pre-selection
+  const handleAnalyze = async (prompt, _ignoredTechId, formMeta) => {
+    setLoading(true);
+    try {
+      const res = await analyzeRequirement(prompt, null);
+
+      // Allow optional user overrides for vendor/version from the form
+      if (res?.specification?.adapter) {
+        if (formMeta?.vendor) res.specification.adapter.vendor = formMeta.vendor;
+        if (formMeta?.version) res.specification.adapter.version = formMeta.version;
+      }
+
+      setParsedResult(res);
+      setSpecification(res.specification);
+      setCurrentStep(2);
+    } catch (err) {
+      alert('Error calling AI analyzer: ' + (err.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2: User reviews/edits AI-generated params and clicks Next
+  const handleParamsNext = (updatedSpec) => {
+    setSpecification(updatedSpec);
+    setCurrentStep(3);
+  };
+
+  // Step 3: Generate project source files from spec
+  const handleGenerate = async (finalSpec) => {
+    setLoading(true);
+    try {
+      const res = await generateAdapter(finalSpec);
+      setGeneratedResult(res);
+      setCurrentStep(4);
+    } catch (err) {
+      alert('Error generating adapter project: ' + (err.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 4: Trigger isolated Maven build
+  const handleBuild = async () => {
+    if (!generatedResult) return;
+    setLoading(true);
+    try {
+      const { buildId, workspacePath } = generatedResult;
+      const adapterName = specification?.adapter?.name || 'CustomAdapter';
+      const scheme      = specification?.adapter?.scheme || 'custom-adapter';
+
+      await triggerBuild(buildId, workspacePath, adapterName, scheme);
+      setCurrentStep(5);
+      pollBuildStatus(buildId);
+    } catch (err) {
+      alert('Error triggering build: ' + (err.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // AI Auto-Fix & Re-Run handler
+  const handleAutoFix = async () => {
+    if (!generatedResult || !buildJob) return;
+    setAutoFixing(true);
+    try {
+      const res = await autoFixBuild(
+        generatedResult.buildId,
+        buildJob.buildLogs,
+        specification
+      );
+      if (res.specification) {
+        setSpecification(res.specification);
+      }
+      if (res.generatedFiles) {
+        setGeneratedResult((prev) => ({
+          ...prev,
+          generatedFiles: res.generatedFiles,
+        }));
+      }
+      pollBuildStatus(generatedResult.buildId);
+    } catch (err) {
+      alert('AI Auto-Fix error: ' + (err.message || 'Unknown error'));
+    } finally {
+      setAutoFixing(false);
+    }
+  };
+
+  // Poll build status every second
+  const pollBuildStatus = (buildId) => {
+    const interval = setInterval(async () => {
+      try {
+        const job = await fetchBuildStatus(buildId);
+        setBuildJob(job);
+        if (job.status === 'SUCCESS' || job.status === 'FAILURE') {
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error('Status poll error:', err);
+        clearInterval(interval);
+      }
+    }, 1000);
+  };
+
+  const handleReset = () => {
+    setCurrentStep(1);
+    setParsedResult(null);
+    setSpecification(null);
+    setGeneratedResult(null);
+    setBuildJob(null);
+    setAutoFixing(false);
+  };
+
   return (
-    <GeneratorProvider>
-      <BrowserRouter>
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
-        <Header />
-        <Routes>
-          {/* Default Route: Landing Page */}
-          <Route path="/" element={<LandingPage />} />
-          
-          <Route path="/generator" element={<Generator />} />
-          
-          {/* Protected Routes */}
-          <Route 
-            path="/dashboard" 
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } 
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Header user={user} onLogout={handleLogout} />
+      
+      {!user ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {showSignup ? (
+            <Signup onSignupSuccess={() => setShowSignup(false)} onSwitchToLogin={() => setShowSignup(false)} />
+          ) : (
+            <Login onLogin={handleLogin} onSwitchToSignup={() => setShowSignup(true)} />
+          )}
+        </div>
+      ) : (
+        <>
+          <StepWizard currentStep={currentStep} onSelectStep={(s) => setCurrentStep(s)} />
+
+          <main style={{ flex: 1, padding: '0 24px 32px 24px' }}>
+            {currentStep === 1 && (
+              <RequirementForm onAnalyze={handleAnalyze} loading={loading} />
+            )}
+
+        {currentStep === 2 && (
+          <DynamicTechForm
+            parsedResult={parsedResult}
+            onNext={handleParamsNext}
+            onPrev={() => setCurrentStep(1)}
           />
-          <Route 
-            path="/profile" 
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } 
+        )}
+
+        {currentStep === 3 && (
+          <SpecificationViewer
+            specification={specification}
+            onGenerate={handleGenerate}
+            onPrev={() => setCurrentStep(2)}
+            loading={loading}
           />
-          
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
-      </BrowserRouter>
-    </GeneratorProvider>
+        )}
+
+        {currentStep === 4 && (
+          <SourceCodeViewer
+            generatedResult={generatedResult}
+            onBuild={handleBuild}
+            onPrev={() => setCurrentStep(3)}
+            loading={loading}
+          />
+        )}
+
+        {currentStep === 5 && (
+          <BuildConsole
+            buildJob={buildJob}
+            onInspect={() => setCurrentStep(6)}
+            onPrev={() => setCurrentStep(4)}
+            onReRun={handleBuild}
+            onAutoFix={handleAutoFix}
+            autoFixing={autoFixing}
+          />
+        )}
+
+        {currentStep === 6 && (
+          <ArtifactInspector
+            buildJob={buildJob}
+            onReset={handleReset}
+          />
+        )}
+          </main>
+        </>
+      )}
+    </div>
   );
 }

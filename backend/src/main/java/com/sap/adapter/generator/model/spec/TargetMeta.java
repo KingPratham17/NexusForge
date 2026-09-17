@@ -10,6 +10,8 @@ public class TargetMeta {
     private String excludedImports = "";
     private String producerImports = "";
     private String producerImplementation = "";
+    private String consumerImports = "";
+    private String consumerImplementation = "";
 
     public TargetMeta() {}
 
@@ -35,4 +37,10 @@ public class TargetMeta {
 
     public String getProducerImplementation() { return producerImplementation; }
     public void setProducerImplementation(String producerImplementation) { this.producerImplementation = producerImplementation; }
+
+    public String getConsumerImports() { return consumerImports; }
+    public void setConsumerImports(String consumerImports) { this.consumerImports = consumerImports; }
+
+    public String getConsumerImplementation() { return consumerImplementation; }
+    public void setConsumerImplementation(String consumerImplementation) { this.consumerImplementation = consumerImplementation; }
 }

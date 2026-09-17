@@ -3,7 +3,7 @@ import { Sparkles, ArrowRight, Zap, Brain, Cpu } from 'lucide-react';
 
 const EXAMPLE_PROMPTS = [
   "Build a receiver adapter for Apache Cassandra to insert JSON rows into a keyspace table using service account credentials stored in SAP Secure Store.",
-  "Create a sender adapter for Firebase Firestore that reads documents from a collection using OAuth2 service account token.",
+  "Create a sender adapter for an external REST API that reads documents using OAuth2 service account token.",
   "Build a receiver adapter for AWS S3 to upload payload files to a bucket using IAM role credentials via SAP Secure Parameter Store.",
   "Create a sender adapter for Oracle Database 19c that executes stored procedures and reads result sets using JDBC connection.",
   "Build a receiver adapter for Salesforce REST API to upsert Account records via the /services/data/v57.0/composite endpoint using OAuth2 client credentials.",

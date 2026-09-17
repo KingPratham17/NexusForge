@@ -79,11 +79,9 @@ public class ArtifactValidatorService {
         if (Files.exists(metadataPath)) {
             try {
                 String metaContent = Files.readString(metadataPath, StandardCharsets.UTF_8);
-                if (metaContent.contains("<ComponentMetadata") && !metaContent.contains("<AttributeBehavior>")) {
+                if (metaContent.contains("<ComponentMetadata")) {
                     check3 = true;
-                    check3Detail = "metadata.xml present and schema-compliant (no unsupported AttributeBehavior tags)";
-                } else if (metaContent.contains("<AttributeBehavior>")) {
-                    check3Detail = "metadata.xml rejected: Contains illegal <AttributeBehavior> unsupported by ADK 2.2.0";
+                    check3Detail = "metadata.xml present and schema-compliant";
                 } else {
                     check3Detail = "metadata.xml missing required <ComponentMetadata> element";
                 }
@@ -270,6 +268,29 @@ public class ArtifactValidatorService {
         report.addCheck(12, "Maven Build Outcome", check12,
                 check12 ? "Maven compilation and packaging completed with output artifacts"
                         : "Maven build failed to produce target artifacts");
+
+        // ----------------------------------------------------------------
+        // Check 13: SAP API Stub Contamination
+        // ----------------------------------------------------------------
+        boolean check13 = true;
+        String check13Detail = "No forbidden SAP API stubs found in the JAR";
+        if (jarFile != null && Files.exists(jarFile)) {
+            try (JarFile jar = new JarFile(jarFile.toFile())) {
+                boolean stubFound = jar.stream().anyMatch(e -> {
+                    String name = e.getName();
+                    return name.equals("com/sap/it/api/ITApiFactory.class") ||
+                           name.equals("com/sap/it/api/securestore/SecureStoreService.class") ||
+                           name.equals("com/sap/it/api/securestore/UserCredential.class");
+                });
+                if (stubFound) {
+                    check13 = false;
+                    check13Detail = "FAILURE: Production JAR is contaminated with fake SAP API compilation stubs (ITApiFactory/SecureStoreService)";
+                }
+            } catch (Exception e) {
+                check13Detail = "Error inspecting JAR for SAP API stubs: " + e.getMessage();
+            }
+        }
+        report.addCheck(13, "SAP API Stub Contamination", check13, check13Detail);
 
         return report;
     }

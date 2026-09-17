@@ -1,0 +1,929 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<ComponentMetadata xmlns:gen="http://www.sap.hci.adk.com/gen" xmlns:bp="http://www.adk.gen/xmlns/blueprint" ComponentId="ctype::Adapter/cname::FirebaseFirestoreAdapter/vendor::Pratham/version::1.0.0" ComponentName="FirebaseFirestoreAdapter" UIElementType="Adapter" IsExtension="false" IsFinal="true" IsPreserves="true" IsDefaultGenerator="true" ComponentDisplayName="FirebaseFirestoreAdapter">
+    <Variant VariantName="Firebase Firestore Sender" VariantId="ctype::AdapterVariant/cname::FirebaseFirestoreAdapter/vendor::Pratham/tp::firebase-firestore/mp::firebase-firestore/direction::Sender" MetadataVersion="2.0" gen:RuntimeComponentBaseUri="firebase-firestore" AttachmentBehavior="Preserve">
+        <InputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </InputContent>
+        <OutputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </OutputContent>
+        <Tab id="connection">
+            <GuiLabels guid="947ffd8b-60ab-4a87-8f97-772697aa14f5">
+                <Label language="EN">Connection</Label>
+                <Label language="DE">Connection</Label>
+            </GuiLabels>
+            <AttributeGroup id="defaultUriParameter">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">URI Setting</Name>
+                <GuiLabels guid="b2b1d216-254a-474b-bb0e-35d60a9e1fd2">
+                    <Label language="EN">URI Setting</Label>
+                    <Label language="DE">URI Setting</Label>
+                </GuiLabels>
+            </AttributeGroup>
+            <AttributeGroup id="FirebaseFirestoreAdapterEndpoint">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Firebase Firestore</Name>
+                <GuiLabels guid="9ec2c525-219c-4792-8206-5b67001fbbff">
+                    <Label language="EN">FirebaseFirestoreAdapter Endpoint</Label>
+                    <Label language="DE">FirebaseFirestoreAdapter Endpoint</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>projectId</ReferenceName>
+                    <description>Firebase Project ID</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>collection</ReferenceName>
+                    <description>Firestore Collection</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>documentId</ReferenceName>
+                    <description>Firestore Document ID</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>operation</ReferenceName>
+                    <description>Firestore Operation</description>
+                </AttributeReference>
+            </AttributeGroup>
+            <AttributeGroup id="ScheduledPollEndpoint">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Scheduled Poll Endpoint</Name>
+                <GuiLabels guid="a6b70f04-7f81-4a0a-bbbf-fc98ec53e40e">
+                    <Label language="EN">Scheduled Poll Endpoint</Label>
+                    <Label language="DE">Scheduled Poll Endpoint</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>backoffMultiplier</ReferenceName>
+                    <description>Configure Backoff Multiplier</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>sendEmptyMessageWhenIdle</ReferenceName>
+                    <description>Configure Send Empty Message When Idle</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>initialDelay</ReferenceName>
+                    <description>Configure Initial Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffIdleThreshold</ReferenceName>
+                    <description>Configure Backoff Idle Threshold</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>delay</ReferenceName>
+                    <description>Configure Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>useFixedDelay</ReferenceName>
+                    <description>Configure Use Fixed Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>startScheduler</ReferenceName>
+                    <description>Configure Start Scheduler</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>runLoggingLevel</ReferenceName>
+                    <description>Configure Run Logging Level</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffErrorThreshold</ReferenceName>
+                    <description>Configure Backoff Error Threshold</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>greedy</ReferenceName>
+                    <description>Configure Greedy</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>timeUnit</ReferenceName>
+                    <description>Configure Time Unit</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>repeatCount</ReferenceName>
+                    <description>Configure Repeat Count</description>
+                </AttributeReference>
+            </AttributeGroup>
+            <AttributeGroup id="ScheduledPollConsumer">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Scheduled Poll Consumer</Name>
+                <GuiLabels guid="d97945c3-18c3-466a-810e-4c365a8bcc20">
+                    <Label language="EN">Scheduled Poll Consumer</Label>
+                    <Label language="DE">Scheduled Poll Consumer</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>backoffMultiplier</ReferenceName>
+                    <description>Configure Backoff Multiplier</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>idleCounter</ReferenceName>
+                    <description>Configure Idle Counter</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>initialDelay</ReferenceName>
+                    <description>Configure Initial Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffCounter</ReferenceName>
+                    <description>Configure Backoff Counter</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>useFixedDelay</ReferenceName>
+                    <description>Configure Use Fixed Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>runLoggingLevel</ReferenceName>
+                    <description>Configure Run Logging Level</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffErrorThreshold</ReferenceName>
+                    <description>Configure Backoff Error Threshold</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>greedy</ReferenceName>
+                    <description>Configure Greedy</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>timeUnit</ReferenceName>
+                    <description>Configure Time Unit</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>repeatCount</ReferenceName>
+                    <description>Configure Repeat Count</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>sendEmptyMessageWhenIdle</ReferenceName>
+                    <description>Configure Send Empty Message When Idle</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffIdleThreshold</ReferenceName>
+                    <description>Configure Backoff Idle Threshold</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>successCounter</ReferenceName>
+                    <description>Configure Success Counter</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>errorCounter</ReferenceName>
+                    <description>Configure Error Counter</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>delay</ReferenceName>
+                    <description>Configure Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>startScheduler</ReferenceName>
+                    <description>Configure Start Scheduler</description>
+                </AttributeReference>
+            </AttributeGroup>
+            <AttributeGroup id="DefaultConsumer">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Default Consumer</Name>
+                <GuiLabels guid="9f805df1-24f1-484a-84bc-19e5fc7ba504">
+                    <Label language="EN">Default Consumer</Label>
+                    <Label language="DE">Default Consumer</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>routeId</ReferenceName>
+                    <description>Configure Route Id</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>consumerToString</ReferenceName>
+                    <description>Configure Consumer To String</description>
+                </AttributeReference>
+            </AttributeGroup>
+        </Tab>
+    </Variant>
+    <Variant VariantName="Firebase Firestore Receiver" VariantId="ctype::AdapterVariant/cname::FirebaseFirestoreAdapter/vendor::Pratham/tp::firebase-firestore/mp::firebase-firestore/direction::Receiver" IsRequestResponse="true" MetadataVersion="2.0" gen:RuntimeComponentBaseUri="firebase-firestore" AttachmentBehavior="Preserve">
+        <InputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </InputContent>
+        <OutputContent Cardinality="1" Scope="outsidepool" MessageCardinality="1" isStreaming="false">
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>
+            </Content>
+        </OutputContent>
+        <Tab id="connection">
+            <GuiLabels guid="ac70982c-5d11-4b97-95c5-2d59cb4f7754">
+                <Label language="EN">Connection</Label>
+                <Label language="DE">Connection</Label>
+            </GuiLabels>
+            <AttributeGroup id="defaultUriParameter">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">URI Setting</Name>
+                <GuiLabels guid="304decfc-5103-4f4b-a258-8c81f7b8663f">
+                    <Label language="EN">URI Setting</Label>
+                    <Label language="DE">URI Setting</Label>
+                </GuiLabels>
+            </AttributeGroup>
+            <AttributeGroup id="FirebaseFirestoreAdapterEndpoint">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Firebase Firestore</Name>
+                <GuiLabels guid="820ea6ce-9811-4375-9c16-989c8086af14">
+                    <Label language="EN">FirebaseFirestoreAdapter Endpoint</Label>
+                    <Label language="DE">FirebaseFirestoreAdapter Endpoint</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>projectId</ReferenceName>
+                    <description>Firebase Project ID</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>collection</ReferenceName>
+                    <description>Firestore Collection</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>documentId</ReferenceName>
+                    <description>Firestore Document ID</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>operation</ReferenceName>
+                    <description>Firestore Operation</description>
+                </AttributeReference>
+            </AttributeGroup>
+            <AttributeGroup id="ScheduledPollEndpoint">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Scheduled Poll Endpoint</Name>
+                <GuiLabels guid="ea96620e-6a64-4d35-af7b-e868142e0cdf">
+                    <Label language="EN">Scheduled Poll Endpoint</Label>
+                    <Label language="DE">Scheduled Poll Endpoint</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>backoffMultiplier</ReferenceName>
+                    <description>Configure Backoff Multiplier</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>sendEmptyMessageWhenIdle</ReferenceName>
+                    <description>Configure Send Empty Message When Idle</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>initialDelay</ReferenceName>
+                    <description>Configure Initial Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffIdleThreshold</ReferenceName>
+                    <description>Configure Backoff Idle Threshold</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>delay</ReferenceName>
+                    <description>Configure Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>useFixedDelay</ReferenceName>
+                    <description>Configure Use Fixed Delay</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>startScheduler</ReferenceName>
+                    <description>Configure Start Scheduler</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>runLoggingLevel</ReferenceName>
+                    <description>Configure Run Logging Level</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>backoffErrorThreshold</ReferenceName>
+                    <description>Configure Backoff Error Threshold</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>greedy</ReferenceName>
+                    <description>Configure Greedy</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>timeUnit</ReferenceName>
+                    <description>Configure Time Unit</description>
+                </AttributeReference>
+                <AttributeReference>
+                    <ReferenceName>repeatCount</ReferenceName>
+                    <description>Configure Repeat Count</description>
+                </AttributeReference>
+            </AttributeGroup>
+            <AttributeGroup id="DefaultProducer">
+                <Name xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string">Default Producer</Name>
+                <GuiLabels guid="b5ac42c7-2cff-4777-a55c-f87e813f9d4c">
+                    <Label language="EN">Default Producer</Label>
+                    <Label language="DE">Default Producer</Label>
+                </GuiLabels>
+                <AttributeReference>
+                    <ReferenceName>producerToString</ReferenceName>
+                    <description>Configure Producer To String</description>
+                </AttributeReference>
+            </AttributeGroup>
+        </Tab>
+    </Variant>
+    <AttributeMetadata>
+        <Name>projectId</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="11111111-1111-4111-8111-111111111111">
+            <Label language="EN">Firebase Project ID</Label>
+            <Label language="DE">Firebase Project ID</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>collection</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="22222222-2222-4222-8222-222222222222">
+            <Label language="EN">Firestore Collection</Label>
+            <Label language="DE">Firestore Collection</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>documentId</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="33333333-3333-4333-8333-333333333333">
+            <Label language="EN">Firestore Document ID</Label>
+            <Label language="DE">Firestore Document ID</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>operation</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default>CREATE</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="44444444-4444-4444-8444-444444444444">
+            <Label language="EN">Firestore Operation</Label>
+            <Label language="DE">Firestore Operation</Label>
+        </GuiLabels>
+        <FixedValues>
+            <FixedValue>
+                <Value>CREATE</Value>
+                <GuiLabels guid="55555555-5555-4555-8555-555555555555">
+                    <Label language="EN">CREATE</Label>
+                    <Label language="DE">CREATE</Label>
+                </GuiLabels>
+            </FixedValue>
+        </FixedValues>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffMultiplier</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="cf87c643-fa55-48a9-8f7c-6848c871c921">
+            <Label language="EN">Backoff Multiplier</Label>
+            <Label language="DE">Backoff Multiplier</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>sendEmptyMessageWhenIdle</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="8a2bcfcf-b433-4f6d-9d11-c51ee6795aa9">
+            <Label language="EN">Send Empty Message When Idle</Label>
+            <Label language="DE">Send Empty Message When Idle</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>initialDelay</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default>-1</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="b5a507a7-573a-4904-b2cf-04b32faaa2a9">
+            <Label language="EN">Initial Delay</Label>
+            <Label language="DE">Initial Delay</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffIdleThreshold</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="b09b4619-00f7-4cc6-bda5-342fe1611a8d">
+            <Label language="EN">Backoff Idle Threshold</Label>
+            <Label language="DE">Backoff Idle Threshold</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>delay</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default>-1</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="15e9915a-75db-4167-8ce3-27666531b914">
+            <Label language="EN">Delay</Label>
+            <Label language="DE">Delay</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>useFixedDelay</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default>true</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="be09774d-ca1a-45d8-9a3a-121cf57f2a57">
+            <Label language="EN">Use Fixed Delay</Label>
+            <Label language="DE">Use Fixed Delay</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>startScheduler</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default>true</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="1e90616c-111b-4802-a838-3f4681da5974">
+            <Label language="EN">Start Scheduler</Label>
+            <Label language="DE">Start Scheduler</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>runLoggingLevel</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default>TRACE</Default>
+        <Length/>
+        <isparameterized>false</isparameterized>
+        <GuiLabels guid="74a61ad2-800c-4a6e-a56d-a5a0add2a5a0">
+            <Label language="EN">Run Logging Level</Label>
+            <Label language="DE">Run Logging Level</Label>
+        </GuiLabels>
+        <FixedValues>
+            <FixedValue>
+                <Value>TRACE</Value>
+                <GuiLabels guid="8b35ff53-9101-4659-8920-f876c524b674">
+                    <Label language="EN">TRACE</Label>
+                    <Label language="DE">TRACE</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>ERROR</Value>
+                <GuiLabels guid="312757fc-8ce4-4da0-abc6-06f684143382">
+                    <Label language="EN">ERROR</Label>
+                    <Label language="DE">ERROR</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>INFO</Value>
+                <GuiLabels guid="ec9434ba-99e4-4a3b-9b26-f28bae822b16">
+                    <Label language="EN">INFO</Label>
+                    <Label language="DE">INFO</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>DEBUG</Value>
+                <GuiLabels guid="2990fe8a-1705-4216-a655-86fd05f674e8">
+                    <Label language="EN">DEBUG</Label>
+                    <Label language="DE">DEBUG</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>WARN</Value>
+                <GuiLabels guid="525214e3-3601-402b-99d7-d16d249d422f">
+                    <Label language="EN">WARN</Label>
+                    <Label language="DE">WARN</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>OFF</Value>
+                <GuiLabels guid="6b512bc0-1ded-462d-8d92-64e26a2567d1">
+                    <Label language="EN">OFF</Label>
+                    <Label language="DE">OFF</Label>
+                </GuiLabels>
+            </FixedValue>
+        </FixedValues>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffErrorThreshold</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="75cfa427-ed4c-4de9-9a7a-2901739a2835">
+            <Label language="EN">Backoff Error Threshold</Label>
+            <Label language="DE">Backoff Error Threshold</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>greedy</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="d1ff2aef-bf97-4d73-a37e-9eac93116f31">
+            <Label language="EN">Greedy</Label>
+            <Label language="DE">Greedy</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>timeUnit</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default>MILLISECONDS</Default>
+        <Length/>
+        <isparameterized>false</isparameterized>
+        <GuiLabels guid="a682f1f1-0d41-476e-add3-5659b42f4dc4">
+            <Label language="EN">Time Unit</Label>
+            <Label language="DE">Time Unit</Label>
+        </GuiLabels>
+        <FixedValues>
+            <FixedValue>
+                <Value>MILLISECONDS</Value>
+                <GuiLabels guid="5ae6f78c-0add-4be1-8184-d0e66abb3045">
+                    <Label language="EN">MILLISECONDS</Label>
+                    <Label language="DE">MILLISECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>MICROSECONDS</Value>
+                <GuiLabels guid="3e533aed-c9cb-47a1-a17d-5e970af3640e">
+                    <Label language="EN">MICROSECONDS</Label>
+                    <Label language="DE">MICROSECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>SECONDS</Value>
+                <GuiLabels guid="e0cfc0a7-b455-42c2-91ca-169eeda6a6a9">
+                    <Label language="EN">SECONDS</Label>
+                    <Label language="DE">SECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>NANOSECONDS</Value>
+                <GuiLabels guid="fe73339a-120f-42f1-9b12-e2e15d5fdfde">
+                    <Label language="EN">NANOSECONDS</Label>
+                    <Label language="DE">NANOSECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>DAYS</Value>
+                <GuiLabels guid="1445cfed-dc9d-4a57-b02c-8da0d64c4da0">
+                    <Label language="EN">DAYS</Label>
+                    <Label language="DE">DAYS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>HOURS</Value>
+                <GuiLabels guid="0dac40ee-beac-42ea-ad76-09737650a02c">
+                    <Label language="EN">HOURS</Label>
+                    <Label language="DE">HOURS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>MINUTES</Value>
+                <GuiLabels guid="3d265b1f-7ee1-495a-9785-6d15f220565a">
+                    <Label language="EN">MINUTES</Label>
+                    <Label language="DE">MINUTES</Label>
+                </GuiLabels>
+            </FixedValue>
+        </FixedValues>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>repeatCount</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="aa4799d2-c7ef-445c-bc6c-033440bec1e9">
+            <Label language="EN">Repeat Count</Label>
+            <Label language="DE">Repeat Count</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffMultiplier</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="de3e8d5b-475c-454a-918f-e1bc3f5f5253">
+            <Label language="EN">Backoff Multiplier</Label>
+            <Label language="DE">Backoff Multiplier</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>idleCounter</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="94e7d558-919f-4c6e-940c-0f27c3be75fd">
+            <Label language="EN">Idle Counter</Label>
+            <Label language="DE">Idle Counter</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>initialDelay</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default>1000</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="980a9cf6-e291-4092-a7d9-905a8cf36123">
+            <Label language="EN">Initial Delay</Label>
+            <Label language="DE">Initial Delay</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffCounter</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="7cc57fd0-01ea-4a3b-bfb0-1a444e235e23">
+            <Label language="EN">Backoff Counter</Label>
+            <Label language="DE">Backoff Counter</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>useFixedDelay</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default>true</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="9d3aaff6-b40e-4b3e-a599-06a0b30e6a3c">
+            <Label language="EN">Use Fixed Delay</Label>
+            <Label language="DE">Use Fixed Delay</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>runLoggingLevel</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default>TRACE</Default>
+        <Length/>
+        <isparameterized>false</isparameterized>
+        <GuiLabels guid="22397137-a44b-4be2-b8b5-de12b655d72d">
+            <Label language="EN">Run Logging Level</Label>
+            <Label language="DE">Run Logging Level</Label>
+        </GuiLabels>
+        <FixedValues>
+            <FixedValue>
+                <Value>TRACE</Value>
+                <GuiLabels guid="baab8a0c-1f3a-4dbb-b129-f220336765ff">
+                    <Label language="EN">TRACE</Label>
+                    <Label language="DE">TRACE</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>ERROR</Value>
+                <GuiLabels guid="1ee679aa-7190-470a-a6eb-b83e71add734">
+                    <Label language="EN">ERROR</Label>
+                    <Label language="DE">ERROR</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>INFO</Value>
+                <GuiLabels guid="dae8d5f7-de6e-415c-baf6-229ae8a9fbc4">
+                    <Label language="EN">INFO</Label>
+                    <Label language="DE">INFO</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>DEBUG</Value>
+                <GuiLabels guid="a53f2626-3ca8-4c52-984c-94c6d4f06bd5">
+                    <Label language="EN">DEBUG</Label>
+                    <Label language="DE">DEBUG</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>WARN</Value>
+                <GuiLabels guid="41ab3f6b-a6c7-4953-aadc-299789deeded">
+                    <Label language="EN">WARN</Label>
+                    <Label language="DE">WARN</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>OFF</Value>
+                <GuiLabels guid="8997ebca-c281-4261-8a30-6b70810337eb">
+                    <Label language="EN">OFF</Label>
+                    <Label language="DE">OFF</Label>
+                </GuiLabels>
+            </FixedValue>
+        </FixedValues>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffErrorThreshold</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="d39246e7-e9c1-4669-ae8f-43e5f2e01f71">
+            <Label language="EN">Backoff Error Threshold</Label>
+            <Label language="DE">Backoff Error Threshold</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>greedy</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="4c7a2a30-1947-4d8f-83aa-e8442e90479e">
+            <Label language="EN">Greedy</Label>
+            <Label language="DE">Greedy</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>timeUnit</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default>MILLISECONDS</Default>
+        <Length/>
+        <isparameterized>false</isparameterized>
+        <GuiLabels guid="e778e98c-9653-4c80-b1ec-e5ec80b32c2d">
+            <Label language="EN">Time Unit</Label>
+            <Label language="DE">Time Unit</Label>
+        </GuiLabels>
+        <FixedValues>
+            <FixedValue>
+                <Value>MILLISECONDS</Value>
+                <GuiLabels guid="8bca70ae-2166-46fa-b31c-025a99999964">
+                    <Label language="EN">MILLISECONDS</Label>
+                    <Label language="DE">MILLISECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>MICROSECONDS</Value>
+                <GuiLabels guid="9e423853-b010-44b6-9d2d-b81c9313a44b">
+                    <Label language="EN">MICROSECONDS</Label>
+                    <Label language="DE">MICROSECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>SECONDS</Value>
+                <GuiLabels guid="3a997ba4-99ba-494b-9a10-23e0d58716e9">
+                    <Label language="EN">SECONDS</Label>
+                    <Label language="DE">SECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>NANOSECONDS</Value>
+                <GuiLabels guid="87112bdd-c826-4703-a847-5092ac445bf0">
+                    <Label language="EN">NANOSECONDS</Label>
+                    <Label language="DE">NANOSECONDS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>DAYS</Value>
+                <GuiLabels guid="651df7cc-c454-4a56-9144-08d536d7d370">
+                    <Label language="EN">DAYS</Label>
+                    <Label language="DE">DAYS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>HOURS</Value>
+                <GuiLabels guid="096e968d-abbf-407b-819b-60191fdc41e9">
+                    <Label language="EN">HOURS</Label>
+                    <Label language="DE">HOURS</Label>
+                </GuiLabels>
+            </FixedValue>
+            <FixedValue>
+                <Value>MINUTES</Value>
+                <GuiLabels guid="b7c1b8c0-f6da-4378-9056-39729efc866e">
+                    <Label language="EN">MINUTES</Label>
+                    <Label language="DE">MINUTES</Label>
+                </GuiLabels>
+            </FixedValue>
+        </FixedValues>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>repeatCount</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="cd03c646-887d-4bc4-a2df-42d783b06f0b">
+            <Label language="EN">Repeat Count</Label>
+            <Label language="DE">Repeat Count</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>sendEmptyMessageWhenIdle</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="3228124b-309b-4d58-b86f-f079a735a87c">
+            <Label language="EN">Send Empty Message When Idle</Label>
+            <Label language="DE">Send Empty Message When Idle</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>backoffIdleThreshold</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:integer</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="d0c64532-c0f3-486c-b0d1-bf3c118f6c88">
+            <Label language="EN">Backoff Idle Threshold</Label>
+            <Label language="DE">Backoff Idle Threshold</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>successCounter</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="8d07ad17-a463-4ee9-a049-a627637923de">
+            <Label language="EN">Success Counter</Label>
+            <Label language="DE">Success Counter</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>errorCounter</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="e19fb25c-f98e-474c-bb27-17b087dbd9c8">
+            <Label language="EN">Error Counter</Label>
+            <Label language="DE">Error Counter</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>delay</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:long</DataType>
+        <Default>500</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="3e12f33c-c57a-4c59-8e52-ac74f3990e49">
+            <Label language="EN">Delay</Label>
+            <Label language="DE">Delay</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>startScheduler</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:boolean</DataType>
+        <Default>true</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="a953c222-a5e4-427c-9b33-1eadaaff6e56">
+            <Label language="EN">Start Scheduler</Label>
+            <Label language="DE">Start Scheduler</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>routeId</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="af4b8d6c-3f52-4cb5-b421-9d1ca96cbede">
+            <Label language="EN">Route Id</Label>
+            <Label language="DE">Route Id</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>consumerToString</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="39589e8d-a22f-4e03-a205-902d15057c6c">
+            <Label language="EN">Consumer To String</Label>
+            <Label language="DE">Consumer To String</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+    <AttributeMetadata>
+        <Name>producerToString</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+        <GuiLabels guid="1de64c7c-c9fd-4e86-8e56-0fa27e0bd9ff">
+            <Label language="EN">Producer To String</Label>
+            <Label language="DE">Producer To String</Label>
+        </GuiLabels>
+    </AttributeMetadata>
+</ComponentMetadata>

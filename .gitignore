@@ -4,3 +4,8 @@ frontend/dist/
 .idea/
 *.iml
 .DS_Store
+
+**/target/
+**/*.class
+**/*.jar
+.env

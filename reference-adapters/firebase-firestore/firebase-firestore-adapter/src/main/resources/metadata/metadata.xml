@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<ComponentMetadata
+        xmlns:gen="http://www.sap.hci.adk.com/gen"
+        xmlns:bp="http://www.adk.gen/xmlns/blueprint"
+        ComponentId="ctype::Adapter/cname::FirebaseFirestoreAdapter/vendor::Pratham/version::1.0.0"
+        ComponentName="FirebaseFirestoreAdapter"
+        UIElementType="Adapter"
+        IsExtension="false"
+        IsFinal="true"
+        IsPreserves="true"
+        IsDefaultGenerator="true"
+        ComponentDisplayName="FirebaseFirestoreAdapter">
+
+    <!-- ========================================================= -->
+    <!-- Firebase Firestore Receiver                              -->
+    <!-- ========================================================= -->
+
+    <Variant
+            VariantName="Firebase Firestore Receiver"
+            VariantId="ctype::AdapterVariant/cname::FirebaseFirestoreAdapter/vendor::Pratham/tp::firebase-firestore/mp::firebase-firestore/direction::Receiver"
+            IsRequestResponse="true"
+            MetadataVersion="2.0"
+            gen:RuntimeComponentBaseUri="firebase-firestore"
+            AttachmentBehavior="Preserve">
+
+        <InputContent
+                Cardinality="1"
+                Scope="outsidepool"
+                MessageCardinality="1"
+                isStreaming="false">
+
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema
+                        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:type="xs:string"/>
+            </Content>
+
+        </InputContent>
+
+        <OutputContent
+                Cardinality="1"
+                Scope="outsidepool"
+                MessageCardinality="1"
+                isStreaming="false">
+
+            <Content>
+                <ContentType>Any</ContentType>
+                <Schema
+                        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:type="xs:string"/>
+            </Content>
+
+        </OutputContent>
+
+        <Tab id="connection">
+
+            <GuiLabels guid="ac70982c-5d11-4b97-95c5-2d59cb4f7754">
+                <Label language="EN">Connection</Label>
+                <Label language="DE">Connection</Label>
+            </GuiLabels>
+
+            <AttributeGroup id="FirebaseFirestoreAdapterEndpoint">
+
+                <Name
+                        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:type="xs:string">Firebase Firestore</Name>
+
+                <GuiLabels guid="820ea6ce-9811-4375-9c16-989c8086af14">
+                    <Label language="EN">Firebase Firestore</Label>
+                    <Label language="DE">Firebase Firestore</Label>
+                </GuiLabels>
+
+                <AttributeReference>
+                    <ReferenceName>firebaseProjectId</ReferenceName>
+                    <description>Firebase Project ID</description>
+                </AttributeReference>
+
+                <AttributeReference>
+                    <ReferenceName>credentialAlias</ReferenceName>
+                    <description>Firebase Secure Parameter Alias</description>
+                </AttributeReference>
+
+                <AttributeReference>
+                    <ReferenceName>collection</ReferenceName>
+                    <description>Firestore Collection</description>
+                </AttributeReference>
+
+                <AttributeReference>
+                    <ReferenceName>documentId</ReferenceName>
+                    <description>Firestore Document ID</description>
+                </AttributeReference>
+
+                <AttributeReference>
+                    <ReferenceName>operation</ReferenceName>
+                    <description>Firestore Operation</description>
+                </AttributeReference>
+
+            </AttributeGroup>
+
+        </Tab>
+
+    </Variant>
+
+    <!-- ========================================================= -->
+    <!-- Attribute Metadata                                        -->
+    <!-- ========================================================= -->
+
+    <AttributeMetadata>
+
+        <Name>firebaseProjectId</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+
+        <GuiLabels guid="11111111-1111-4111-8111-111111111111">
+            <Label language="EN">Firebase Project ID</Label>
+            <Label language="DE">Firebase Project ID</Label>
+        </GuiLabels>
+
+    </AttributeMetadata>
+
+    <AttributeMetadata>
+
+        <Name>credentialAlias</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+
+        <GuiLabels guid="66666666-6666-4666-8666-666666666666">
+            <Label language="EN">Firebase Secure Parameter Alias</Label>
+            <Label language="DE">Firebase Secure Parameter Alias</Label>
+        </GuiLabels>
+
+    </AttributeMetadata>
+
+    <AttributeMetadata>
+
+        <Name>collection</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+
+        <GuiLabels guid="22222222-2222-4222-8222-222222222222">
+            <Label language="EN">Firestore Collection</Label>
+            <Label language="DE">Firestore Collection</Label>
+        </GuiLabels>
+
+    </AttributeMetadata>
+
+    <AttributeMetadata>
+
+        <Name>documentId</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default/>
+        <Length/>
+        <isparameterized>true</isparameterized>
+
+        <GuiLabels guid="33333333-3333-4333-8333-333333333333">
+            <Label language="EN">Firestore Document ID</Label>
+            <Label language="DE">Firestore Document ID</Label>
+        </GuiLabels>
+
+    </AttributeMetadata>
+
+    <AttributeMetadata>
+
+        <Name>operation</Name>
+        <Usage>false</Usage>
+        <DataType>xsd:string</DataType>
+        <Default>CREATE</Default>
+        <Length/>
+        <isparameterized>true</isparameterized>
+
+        <GuiLabels guid="44444444-4444-4444-8444-444444444444">
+            <Label language="EN">Firestore Operation</Label>
+            <Label language="DE">Firestore Operation</Label>
+        </GuiLabels>
+
+        <FixedValues>
+
+            <FixedValue>
+                <Value>CREATE</Value>
+
+                <GuiLabels guid="55555555-5555-4555-8555-555555555555">
+                    <Label language="EN">CREATE</Label>
+                    <Label language="DE">CREATE</Label>
+                </GuiLabels>
+            </FixedValue>
+
+        </FixedValues>
+
+    </AttributeMetadata>
+
+</ComponentMetadata>

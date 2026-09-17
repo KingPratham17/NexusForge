@@ -106,7 +106,7 @@ public class AdapterController {
         Path workspaceDir = Paths.get(workspacesRootDir, buildId);
 
         // 1. Call Claude AI to diagnose errorLog and get fixed TargetMeta
-        com.sap.adapter.generator.model.spec.TargetMeta fixedTarget = aiRequirementParserService.autoFixRequirement(errorLog, spec);
+        com.sap.adapter.generator.model.spec.TargetMeta fixedTarget = aiRequirementParserService.autoFixRequirement(errorLog, spec, workspaceDir);
 
         if (fixedTarget != null && spec != null) {
             spec.setTarget(fixedTarget);
@@ -149,25 +149,12 @@ public class AdapterController {
     @GetMapping("/adapters/build/{buildId}/download/esa")
     public ResponseEntity<Resource> downloadEsa(@PathVariable String buildId) {
         BuildJob job = mavenBuildWorkerService.getJob(buildId);
-        File esaFile = null;
-
-        if (job != null && job.getInspectionReport() != null && job.getInspectionReport().getEsaPath() != null) {
-            esaFile = new File(job.getInspectionReport().getEsaPath());
+        if (job == null || job.getInspectionReport() == null || job.getInspectionReport().getEsaPath() == null) {
+            return ResponseEntity.notFound().build();
         }
 
-        if (esaFile == null || !esaFile.exists()) {
-            // Fallback: server might have restarted, scan the workspace directory on disk
-            Path targetDir = Paths.get(workspacesRootDir, buildId, "target");
-            File dir = targetDir.toFile();
-            if (dir.exists() && dir.isDirectory()) {
-                File[] files = dir.listFiles((d, name) -> name.endsWith(".esa"));
-                if (files != null && files.length > 0) {
-                    esaFile = files[0];
-                }
-            }
-        }
-
-        if (esaFile == null || !esaFile.exists()) {
+        File esaFile = new File(job.getInspectionReport().getEsaPath());
+        if (!esaFile.exists()) {
             return ResponseEntity.notFound().build();
         }
 

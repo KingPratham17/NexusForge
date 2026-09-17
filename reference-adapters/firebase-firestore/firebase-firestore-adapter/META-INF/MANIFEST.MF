@@ -1,0 +1,20 @@
+Manifest-Version: 1.0
+Bnd-LastModified: 1788170385208
+Build-Jdk-Spec: 21
+Bundle-ClassPath: .,lib/*.jar
+Bundle-ManifestVersion: 2
+Bundle-Name: com.poc.firebase.firebase-firestore-adapter
+Bundle-SymbolicName: firebase-firestore-adapter
+Bundle-Version: 1.0.0.SNAPSHOT
+Created-By: Apache Maven Bundle Plugin 5.1.9
+Export-Package: com.poc.firebase;uses:="org.apache.camel,org.apache.ca
+ mel.spi,org.apache.camel.support";version="1.0.0.SNAPSHOT"
+Import-Package: com.sap.it.api,com.sap.it.api.securestore,org.apache.c
+ amel;version="[3.14,4)",org.apache.camel.spi;version="[3.14,4)",org.a
+ pache.camel.support;version="[3.14,4)",org.slf4j;version="[1.6,2)",ja
+ vax.crypto,javax.crypto.spec,javax.net,javax.net.ssl,javax.naming,jav
+ ax.naming.directory,javax.naming.ldap,javax.security.auth.x500,javax.
+ security.cert,javax.servlet;resolution:=optional
+Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"
+Tool: Bnd-6.3.1.202206071316
+

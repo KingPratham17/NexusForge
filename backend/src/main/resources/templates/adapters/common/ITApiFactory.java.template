@@ -1,0 +1,22 @@
+package com.sap.it.api;
+
+import com.sap.it.api.securestore.SecureStoreService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class ITApiFactory {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(ITApiFactory.class);
+    private static SecureStoreService secureStoreService;
+
+    public static <T> T getApi(Class<T> apiClass, Object context) {
+        if (apiClass.equals(SecureStoreService.class)) {
+            if (secureStoreService == null) {
+                secureStoreService = new SecureStoreService();
+            }
+            return (T) secureStoreService;
+        }
+        LOG.warn("Requested unsupported API class: " + apiClass.getName());
+        return null;
+    }
+}

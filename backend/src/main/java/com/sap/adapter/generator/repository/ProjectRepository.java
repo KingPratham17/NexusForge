@@ -1,12 +1,9 @@
 package com.sap.adapter.generator.repository;
 
-import com.sap.adapter.generator.model.entity.Project;
+import com.sap.adapter.generator.model.Project;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
 import java.util.List;
 
-@Repository
 public interface ProjectRepository extends JpaRepository<Project, Long> {
-    List<Project> findByUserId(Long userId);
+    List<Project> findByUserIdOrderByLastUpdatedDesc(Long userId);
 }

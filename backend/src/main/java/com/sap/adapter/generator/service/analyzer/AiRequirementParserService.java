@@ -3,8 +3,11 @@ package com.sap.adapter.generator.service.analyzer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sap.adapter.generator.model.spec.*;
+import com.sap.adapter.generator.registry.TechnologyRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.sap.adapter.generator.service.ai.LLMIntegrationService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -48,8 +51,16 @@ public class AiRequirementParserService {
     private String modelName;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final TechnologyRegistry registry;
+    private final LLMIntegrationService llmService;
 
-    public Map<String, Object> parseRequirement(String userPrompt, String ignoredTechId) {
+    @Autowired
+    public AiRequirementParserService(TechnologyRegistry registry, LLMIntegrationService llmService) {
+        this.registry = registry;
+        this.llmService = llmService;
+    }
+
+    public Map<String, Object> parseRequirement(String userPrompt, String technologyId) {
         if (userPrompt == null || userPrompt.trim().isEmpty()) {
             return errorResult("Please provide a requirement description.");
         }
@@ -59,7 +70,7 @@ public class AiRequirementParserService {
         if (llmEnabled && token != null && !token.isBlank()) {
             try {
                 LOG.info("Calling Claude AI (model={}, proxy={}) for dynamic requirement analysis & SDK code generation...", modelName, baseUrl);
-                AdapterSpecification llmSpec = callClaudeAi(userPrompt.trim(), token);
+                AdapterSpecification llmSpec = callClaudeAi(userPrompt.trim(), token, technologyId);
                 if (llmSpec != null) {
                     LOG.info("Claude AI successfully generated specification for target system '{}' (scheme={})",
                             llmSpec.getTarget() != null ? llmSpec.getTarget().getTechnology() : "custom",
@@ -85,17 +96,20 @@ public class AiRequirementParserService {
         return buildDynamicFallback(userPrompt);
     }
 
-    public TargetMeta autoFixRequirement(String errorLog, AdapterSpecification currentSpec) {
-        String token = getEffectiveToken();
-        if (token == null || token.isBlank()) {
-            return null;
+    public TargetMeta autoFixRequirement(String errorLog, AdapterSpecification currentSpec, java.nio.file.Path workspaceDir) {
+        String fileContext = extractFailingSourceCode(errorLog, workspaceDir);
+        if (fileContext == null || fileContext.isBlank()) {
+            LOG.warn("Auto-Fix could not extract source context. Falling back to heuristic auto-fix.");
         }
+        String prompt = buildAutoFixPrompt(errorLog, currentSpec, fileContext);
+        TargetMeta resultTarget = currentSpec != null ? currentSpec.getTarget() : null;
 
         try {
-            LOG.info("Calling Claude AI to analyze build errors and auto-fix specification for {}...",
-                    currentSpec != null && currentSpec.getAdapter() != null ? currentSpec.getAdapter().getName() : "CustomAdapter");
-
-            String prompt = buildAutoFixPrompt(errorLog, currentSpec);
+            String token = getEffectiveToken();
+            if (token == null || token.isBlank()) {
+                LOG.warn("No API token found, skipping Claude AI Auto-Fix.");
+                return applyHeuristicAutoFix(errorLog, currentSpec);
+            }
 
             String endpoint = baseUrl.endsWith("/") ? baseUrl + "v1/messages" : baseUrl + "/v1/messages";
             URL url = new URL(endpoint);
@@ -141,13 +155,16 @@ public class AiRequirementParserService {
                     TargetMeta fixed = objectMapper.readValue(text.trim(), TargetMeta.class);
                     LOG.info("Claude AI successfully returned auto-fix TargetMeta: tech={}, imports={}, implLength={}",
                             fixed.getTechnology(), fixed.getProducerImports(), fixed.getProducerImplementation() != null ? fixed.getProducerImplementation().length() : 0);
-                    return fixed;
+                    resultTarget = fixed;
                 }
             }
         } catch (Exception e) {
             LOG.warn("Claude AI Auto-Fix failed: {}", e.getMessage());
         }
-        return applyHeuristicAutoFix(errorLog, currentSpec);
+
+        AdapterSpecification tempSpec = new AdapterSpecification();
+        tempSpec.setTarget(resultTarget);
+        return applyHeuristicAutoFix(errorLog, tempSpec);
     }
 
     public TargetMeta applyHeuristicAutoFix(String errorLog, AdapterSpecification currentSpec) {
@@ -237,11 +254,51 @@ public class AiRequirementParserService {
         return target;
     }
 
-    private String buildAutoFixPrompt(String errorLog, AdapterSpecification currentSpec) {
+    private String extractFailingSourceCode(String errorLog, java.nio.file.Path workspaceDir) {
+        if (errorLog == null || workspaceDir == null) return "";
+        try {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("([a-zA-Z0-9_]+(Producer|Consumer)\\.java)");
+            java.util.regex.Matcher m = p.matcher(errorLog);
+            if (m.find()) {
+                String fileName = m.group(1);
+                LOG.info("Auto-Fix identified failing target implementation file: {}", fileName);
+                
+                java.nio.file.Path javaSrcDir = workspaceDir.resolve("src/main/java");
+                if (java.nio.file.Files.exists(javaSrcDir)) {
+                    java.util.Optional<java.nio.file.Path> foundFile = java.nio.file.Files.walk(javaSrcDir)
+                            .filter(path -> java.nio.file.Files.isRegularFile(path) && path.getFileName().toString().equals(fileName))
+                            .findFirst();
+                            
+                    if (foundFile.isPresent()) {
+                        LOG.info("Auto-Fix reading source context from: {}", foundFile.get());
+                        return java.nio.file.Files.readString(foundFile.get(), StandardCharsets.UTF_8);
+                    } else {
+                        LOG.warn("Auto-Fix could not find file {} in {}", fileName, javaSrcDir);
+                    }
+                }
+            } else {
+                LOG.warn("Auto-Fix could not identify a valid Producer or Consumer .java file in the error log.");
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to extract source code for Auto-Fix context: {}", e.getMessage());
+        }
+        return "";
+    }
+
+    private String buildAutoFixPrompt(String errorLog, AdapterSpecification currentSpec, String fileContext) {
         String tech = currentSpec != null && currentSpec.getTarget() != null ? currentSpec.getTarget().getTechnology() : "Target System";
         String currentImpl = currentSpec != null && currentSpec.getTarget() != null ? currentSpec.getTarget().getProducerImplementation() : "";
+        String currentConsumerImpl = currentSpec != null && currentSpec.getTarget() != null ? currentSpec.getTarget().getConsumerImplementation() : "";
         String currentDeps = currentSpec != null && currentSpec.getTarget() != null ? currentSpec.getTarget().getCustomDependencies() : "";
         String currentImports = currentSpec != null && currentSpec.getTarget() != null ? currentSpec.getTarget().getProducerImports() : "";
+        String currentConsumerImports = currentSpec != null && currentSpec.getTarget() != null ? currentSpec.getTarget().getConsumerImports() : "";
+
+        String specParams = "";
+        try {
+            if (currentSpec != null && currentSpec.getConnection() != null) {
+                specParams = objectMapper.writeValueAsString(currentSpec.getConnection().getParameters());
+            }
+        } catch (Exception e) {}
 
         return """
                 You are an expert SAP ADK and Java compiler engineer.
@@ -251,20 +308,31 @@ public class AiRequirementParserService {
                 %s
                 --- END ERROR LOG ---
 
-                --- CURRENT TARGET METADATA ---
-                Technology: %s
+                --- TEMPLATE-OWNED / READ-ONLY SOURCE CONTEXT ---
+                %s
+                --- END READ-ONLY SOURCE CONTEXT ---
+
+                --- ADAPTER SPECIFICATION PARAMETERS ---
+                %s
+                --- END SPECIFICATION PARAMETERS ---
+
+                --- AI-EDITABLE TARGET IMPLEMENTATION ---
                 Producer Imports: %s
+                Consumer Imports: %s
                 Custom Dependencies: %s
                 Producer Implementation: %s
-                --- END CURRENT TARGET METADATA ---
+                Consumer Implementation: %s
+                --- END AI-EDITABLE TARGET IMPLEMENTATION ---
 
-                Analyze the exact compilation/build error.
-                Fix missing imports, invalid method calls, duplicate variable declarations, or missing Maven dependencies.
+                Analyze the exact compilation/build error within the context of the provided full source file.
+                The full source file is READ-ONLY context. You cannot change it directly.
+                You can ONLY output changes to the AI-EDITABLE TARGET IMPLEMENTATION snippets (Imports, Dependencies, Implementation).
                 
                 CRITICAL RULES:
                 1. If a dependency failed to download ("Could not find artifact ... in central"), verify the exact groupId/artifactId or replace it with standard Apache HttpClient ('org.apache.httpcomponents:httpclient:4.5.14'). For Salesforce REST, use 'com.frejo:force-rest-api:0.0.45' or standard Apache HttpClient. Never use 'com.force.api:force-rest-api'. For Google Drive API, use known version 'v3-rev20240809-2.0.0'. Never hallucinate unreleased dates like 'v3-rev20240815-2.0.0'.
                 2. Do not include jackson-databind or slf4j in customDependencies (they are already provided by the base POM).
-                3. Ensure all Java classes used in producerImplementation (e.g. IOException) are explicitly imported in producerImports.
+                3. Ensure all Java classes used in the implementations (e.g. IOException) are explicitly imported.
+                4. Variables declared in the TEMPLATE-OWNED section (like parameter strings declared in paramReadLines) ALREADY exist and are immutable. Do NOT redefine them in your AI-EDITABLE snippet (e.g., if `String maxMessages` is already declared in the template, do not redeclare it, and do not assign an `int` to it). If you need an integer, declare a NEW distinct variable name (e.g. `int maxMessagesLimit = Integer.parseInt(...)`).
                 
                 Return ONLY valid JSON matching this structure (no markdown, no preamble):
                 {
@@ -272,21 +340,26 @@ public class AiRequirementParserService {
                   "category": "custom",
                   "customDependencies": "<corrected pom.xml dependencies>",
                   "excludedImports": "<corrected OSGi exclusions>",
-                  "producerImports": "<corrected Java imports>",
-                  "producerImplementation": "<corrected Java producer code>"
+                  "producerImports": "<corrected Java imports for producer>",
+                  "producerImplementation": "<corrected Java producer code>",
+                  "consumerImports": "<corrected Java imports for consumer>",
+                  "consumerImplementation": "<corrected Java consumer code>"
                 }
                 """.formatted(
                         currentSpec != null && currentSpec.getAdapter() != null ? currentSpec.getAdapter().getName() : "CustomAdapter",
                         errorLog != null && errorLog.length() > 3000 ? errorLog.substring(errorLog.length() - 3000) : errorLog,
-                        tech,
+                        fileContext != null && !fileContext.isBlank() ? fileContext : "(No file context available)",
+                        specParams,
                         currentImports,
+                        currentConsumerImports,
                         currentDeps,
                         currentImpl,
+                        currentConsumerImpl,
                         tech
                 );
     }
 
-    private AdapterSpecification callClaudeAi(String userPrompt, String token) throws Exception {
+    private AdapterSpecification callClaudeAi(String userPrompt, String token, String technologyId) throws Exception {
         String endpoint = baseUrl.endsWith("/") ? baseUrl + "v1/messages" : baseUrl + "/v1/messages";
         URL url = new URL(endpoint);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -299,7 +372,7 @@ public class AiRequirementParserService {
         conn.setReadTimeout(45000);
         conn.setDoOutput(true);
 
-        String systemPrompt = buildSystemPrompt(userPrompt);
+        String systemPrompt = buildSystemPrompt(userPrompt, technologyId);
 
         Map<String, Object> body = Map.of(
                 "model", modelName,
@@ -327,13 +400,30 @@ public class AiRequirementParserService {
         return null;
     }
 
-    private String buildSystemPrompt(String userPrompt) {
+    private String buildSystemPrompt(String userPrompt, String technologyId) {
+        StringBuilder pluginsJson = new StringBuilder();
+        try {
+            if (technologyId != null && !technologyId.isBlank() && !technologyId.equals("null")) {
+                pluginsJson.append(objectMapper.writeValueAsString(List.of(registry.getById(technologyId).orElse(null))));
+            } else {
+                pluginsJson.append(objectMapper.writeValueAsString(registry.getAllTechnologies()));
+            }
+        } catch (Exception e) {
+            pluginsJson.append("[]");
+        }
+
         return """
                 You are an expert SAP Cloud Integration ADK architect and Apache Camel developer.
                 Analyze the user's natural language requirement for building a custom SAP Cloud Integration adapter.
 
-                Generate a complete, dynamic AdapterSpecification JSON.
-                Infer the exact target technology (e.g. Cassandra, Firebase, MongoDB, AWS S3, Redis, Snowflake, Oracle, Salesforce, Kafka, SFTP, etc.), its required connection parameters, its Maven SDK dependencies, its OSGi import exclusions, and its Java Producer processing logic.
+                We have the following REGISTERED PLUGINS (Technologies) available:
+                """ + pluginsJson.toString() + """
+
+                If the user's request matches one of the registered plugins, YOU MUST return the exact connection parameters defined in that plugin's TechnologyDefinition! Set `target.technology` to the plugin's `id`.
+                Do NOT hallucinate implementation code if a plugin is matched, because the plugin will provide its own templates. Just fill in the `connection.parameters` with the EXACT values requested by the user, matching the plugin's defined parameter keys.
+
+                If the user's request DOES NOT match any registered plugin, generate a completely dynamic AdapterSpecification JSON (Fallback Mode).
+                In Fallback Mode, infer the exact target technology, its required connection parameters, its Maven SDK dependencies, its OSGi import exclusions, and its Java Producer/Consumer processing logic.
 
                 Output ONLY valid JSON with this EXACT structure (no markdown code blocks, no text before or after):
                 {
@@ -352,7 +442,9 @@ public class AiRequirementParserService {
                     "customDependencies": "    <dependency>\\n      <groupId>com.google.cloud</groupId>\\n      <artifactId>google-cloud-firestore</artifactId>\\n      <version>3.7.0</version>\\n    </dependency>",
                     "excludedImports": "              !com.google.cloud.*,\\n              !com.google.auth.*,",
                     "producerImports": "import com.google.cloud.firestore.*;\\nimport com.google.auth.oauth2.*;",
-                    "producerImplementation": "        LOG.info(\\"Executing target processing logic for payload\\");"
+                    "producerImplementation": "        LOG.info(\\"Executing target processing logic for payload\\");",
+                    "consumerImports": "import com.google.cloud.pubsub.v1.Subscriber;",
+                    "consumerImplementation": "        LOG.info(\\"Executing polling/listening logic\\");"
                   },
                   "authentication": {
                     "type": "secure-parameter",
@@ -363,7 +455,8 @@ public class AiRequirementParserService {
                       {
                         "name": "<camelCaseParamName>",
                         "label": "<Human Readable Label>",
-                        "type": "<string, integer, boolean, secure-alias>",
+                        "type": "<string, integer, boolean, secure-alias, dropdown>",
+                        "options": ["<choice 1>", "<choice 2>"],
                         "required": true,
                         "defaultValue": "<sensible placeholder value>",
                         "description": "<one sentence parameter description>"
@@ -382,33 +475,46 @@ public class AiRequirementParserService {
 
                 Critical Rules:
                 1. customDependencies: Generate ONLY raw target SDK <dependency> XML elements — the actual Java client libraries published on Maven Central.
+                   Prefer the smallest stable client/library that satisfies the target technology requirements. Avoid unnecessarily monolithic SDK bundles when a smaller supported client provides equivalent functionality.
+                   Consider transitive dependency size, Java compatibility, Camel compatibility, and SAP ADK/OSGi packaging constraints when selecting dependencies. Do not assume a particular library unless required by the target technology.
                    NEVER include any org.apache.camel:camel-* dependencies. The Camel core is already provided by the SAP ADK parent pom.
                    Use STABLE, verified release versions that actually exist on Maven Central. Do NOT hallucinate version numbers.
                 2. excludedImports: List all root package prefixes of the embedded SDK prefixed with ! and suffixed with .* (e.g. !com.example.sdk.*).
-                3. producerImports: Include all necessary import statements for SDK classes used in producerImplementation. NEVER import org.apache.camel.* — they are already available.
-                4. producerImplementation:
-                   - ROLE: You are writing code for a Camel Producer (Receiver Adapter in SAP CI architecture). The Producer's ONLY job is to PUBLISH / SEND / WRITE the incoming Camel `body` payload to the target system.
-                     NEVER write subscription or listener logic (`client.subscribe(...)`, `client.setCallback(...)`, `KafkaConsumer`, etc.). Always call publish/send/put methods.
+                3. producerImports / consumerImports: Include all necessary import statements for SDK classes used in the implementation. NEVER import org.apache.camel.* — they are already available.
+                4. IMPLEMENTATION (SENDER OR RECEIVER):
+                   - IF DIRECTION IS RECEIVER (Sending to target):
+                     Populate `producerImplementation`. The ONLY job is to PUBLISH / SEND / WRITE the incoming Camel payload to the target system. NEVER write subscription or listener logic.
+                   - IF DIRECTION IS SENDER (Polling/Listening from target):
+                     Populate `consumerImplementation`. The ONLY job is to POLL or LISTEN for incoming data and push it into the Camel route by calling `processMessage(payloadString)`.
+                     CRITICAL SENDER RULES:
+                     * You MUST initialize `ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();` and use it to convert Maps/Objects to proper JSON strings before calling `processMessage`. NEVER use `.toString()` to serialize payloads!
+                     * You MUST enforce limits! If there is a parameter like `maxDocuments` or `maxResults`, you MUST parse it (e.g. `int limit = Integer.parseInt(endpoint.getMaxDocuments());`) and apply it to the query.
+                     * You MUST increment `messagesProcessed++` inside the loop for every document processed, otherwise the poll method will return 0 and break.
+                     Example: `for (Object obj : results) { String payload = objectMapper.writeValueAsString(obj); processMessage(payload); messagesProcessed++; }`
+                     Do NOT populate `producerImplementation` if it is a Sender.
                    - URI PROTOCOL: Connection URLs (e.g. `brokerUrl`, `serverUrl`) must be checked for protocol schemes. If `!brokerUrl.contains("://")`, prepend `"tcp://"` (e.g. `String serverURI = brokerUrl.contains("://") ? brokerUrl : "tcp://" + brokerUrl;`).
                    - METHOD VARIABLES: The following variables ALREADY exist in method scope and must NOT be re-declared:
-                     * `exchange` (Camel Exchange), `endpoint` (Adapter Endpoint)
-                     * `body` (String — raw payload, use `body.getBytes(StandardCharsets.UTF_8)`)
-                     * `data` (Map<String, Object> — parsed JSON map)
-                     * `LOG` (SLF4J Logger)
+                     * `endpoint` (Adapter Endpoint), `LOG` (SLF4J Logger), `messagesProcessed` (Integer — ONLY available in consumerImplementation)
                      * Connection parameters as String variables (e.g. `brokerUrl`, `topic`, `qos`)
-                   - CREDENTIALS (ZERO RAW CREDENTIALS POLICY): If the target system requires authentication (username, password, client_id, client_secret, API key), DO NOT declare them as connection parameters! Instead, declare a SINGLE connection parameter named `credentialAlias` of type `secure-alias`. Then, inside `producerImplementation`, retrieve the credentials dynamically using the SAP SecureStore API:
+                   - CREDENTIALS (ZERO RAW CREDENTIALS POLICY): If the target system requires authentication, DO NOT declare raw keys as parameters! Instead, declare a SINGLE connection parameter named `credentialAlias` of type `secure-alias`. Then, retrieve the credentials dynamically using the SAP SecureStore API:
+                     `com.sap.it.api.securestore.SecureStoreService secureStoreService = com.sap.it.api.ITApiFactory.getService(com.sap.it.api.securestore.SecureStoreService.class, null);`
                      For Username/Password:
-                     `com.sap.it.api.securestore.UserCredential cred = com.sap.it.api.ITApiFactory.getApi(com.sap.it.api.securestore.SecureStoreService.class, null).getUserCredential(endpoint.getCredentialAlias());`
-                     `String username = cred.getUsername(); String password = new String(cred.getPassword());`
-                     For ClientID/Secret:
-                     `com.sap.it.api.securestore.OAuth2ClientCredential oauth = com.sap.it.api.ITApiFactory.getApi(com.sap.it.api.securestore.SecureStoreService.class, null).getOAuth2ClientCredential(endpoint.getCredentialAlias());`
-                     `String clientId = oauth.getClientId(); String clientSecret = new String(oauth.getClientSecret());`
-                     For API Key/Token:
-                     `com.sap.it.api.securestore.UserCredential cred = com.sap.it.api.ITApiFactory.getApi(com.sap.it.api.securestore.SecureStoreService.class, null).getUserCredential(endpoint.getCredentialAlias());`
-                     `String token = new String(cred.getPassword());`
-                   - CLEANUP: Always disconnect and close client instances before returning from `process()`.
-                5. Connection parameters: Generate 3-6 parameters specific to the target technology. For any boolean flag parameters (e.g. `cleanSession`, `useSsl`, `autoReconnect`), set `"type": "boolean"` and `"defaultValue": "true"` or `"false"` so SAP Integration Suite UI renders a native Checkbox control.
+                     `com.sap.it.api.securestore.UserCredential cred = secureStoreService.getUserCredential(endpoint.getCredentialAlias());`
+                     `String user = cred.getUsername(); String pass = new String(cred.getPassword());`
+                     For API Key/JSON Secret:
+                     `com.sap.it.api.securestore.UserCredential cred = secureStoreService.getUserCredential(endpoint.getCredentialAlias());`
+                     `String secret = new String(cred.getPassword());`
+                     DO NOT USE `new String(password, StandardCharsets.UTF_8)` when passing a `char[]`. Just use `new String(password)`.
+                   - CLEANUP: Always disconnect and close client instances before returning.
+                5. Connection parameters: Generate 3-6 parameters specific to the target technology. For any boolean flag parameters, set `"type": "boolean"` and `"defaultValue": "true"` or `"false"` so SAP Integration Suite UI renders a native Checkbox control. If max limit is needed, generate `maxDocuments` parameter.
                 6. ZERO-RAW-CREDENTIALS POLICY (MANDATORY): In SAP Cloud Integration (CPI), NEVER ask for raw passwords, raw private keys, or raw JSON files. All authentication MUST use a Credential Alias parameter (`"type": "secure-alias"`, `"name": "credentialAlias"`, `"label": "Credential Alias"`, `"defaultValue": "SAP_SECURE_ALIAS"`, `"description": "Deployed Security Material alias in SAP Cloud Integration").
+                7. DROPDOWNS (MANDATORY): If a connection parameter has a fixed set of allowed values (e.g. HTTP Method, QoS Level, Environment), set `"type": "dropdown"` and provide those exact choices in an `"options": ["Choice A", "Choice B"]` array.
+                8. PAYLOAD ACCESS: The generated implementation MUST NOT assume that variables such as body, payload, message, data, or requestBody already exist in scope. If the implementation needs the Camel message payload, it MUST explicitly obtain it from the provided Exchange object. Examples: `String body = exchange.getIn().getBody(String.class);` or `byte[] body = exchange.getIn().getBody(byte[].class);` or `Object body = exchange.getIn().getBody();` Choose the representation appropriate for the target technology. The generic Producer/Consumer templates must remain payload-agnostic. Payload extraction and conversion belong inside the AI-generated technology-specific implementation.
+                9. SLF4J / SAP ADK COMPATIBILITY: Generated code must remain compatible with the SLF4J version available in SAP Integration Suite / SAP ADK (1.6.1). Do NOT assume modern SLF4J varargs APIs. Avoid unsupported logging signatures. For multiple dynamic values, prefer string concatenation when necessary: `LOG.info("Request URL: " + url + ", Method: " + method);` Do not generate logging APIs that require a newer SLF4J version.
+                10. JAVA/API CORRECTNESS: Generated code must use real Java 8 APIs and real methods from the declared dependencies. Never invent: methods, classes, constructors, variables, APIs. Before producing the implementation, ensure that every referenced: variable is declared, method actually exists, class actually exists, required import exists, required dependency is available, method signature matches the actual API. Do NOT redeclare a local variable in the same scope. For example, never generate: `String username = ...; ... String username = ...;` Instead reuse the existing variable or use a different name.
+                11. COMPILATION CONTRACT: The generated implementation is inserted directly into a Java method: `process(Exchange exchange)`. Therefore the generated implementation MUST be valid Java code for that exact scope. It MUST NOT assume hidden variables, hidden helper methods, hidden imports, or code outside the supplied template. The implementation must compile with Java 8 and the dependencies declared for the generated adapter.
+                12. JAVA STRING AND REGEX ESCAPING: All generated Java string literals MUST use valid Java escaping rules. When using regular expressions inside Java string literals, remember that backslashes must be escaped for Java before being interpreted by the regex engine. For example, WRONG: "^\\\\/" CORRECT: "^\\\\\\\\/". However, prefer avoiding unnecessary regex when a simpler Java API can perform the operation safely. For example, instead of `resourcePath.replaceAll("^\\\\\\\\/", "")`, prefer a simpler implementation such as `resourcePath.startsWith("/") ? resourcePath.substring(1) : resourcePath` when the requirement is simply to remove one leading slash. The generated implementation MUST compile as valid Java 8 source code.
+                13. IMPORT CONSISTENCY: Every non-Java-standard class referenced by producerImplementation or consumerImplementation MUST be either: (1) explicitly imported in producerImports/consumerImports, OR (2) referenced using its fully qualified class name. Examples: If implementation uses `ITApiFactory`, `SecureStoreService`, `UserCredential`, then the generated imports MUST contain the corresponding imports (e.g., `import com.sap.it.api.ITApiFactory; import com.sap.it.api.securestore.SecureStoreService; import com.sap.it.api.securestore.UserCredential;`). If implementation uses `HttpClients`, `CloseableHttpClient`, `HttpPost`, then the corresponding Apache imports MUST be present. Do not assume imports are automatically added by the template. Do not generate implementation code that references undeclared classes. The implementation and import lists are a single compilation contract.
 
                 User Requirement Prompt: """ + userPrompt;
     }
@@ -461,49 +567,14 @@ public class AiRequirementParserService {
     }
 
     private Map<String, Object> buildDynamicFallback(String userPrompt) {
-        AdapterSpecification spec = new AdapterSpecification();
-
-        String promptLower = userPrompt.toLowerCase();
-        String techName = inferTechnologyName(userPrompt);
-        String schemeName = techName.toLowerCase().replaceAll("[^a-z0-9]", "") + "-custom";
-        String adapterClassName = toPascalCase(techName) + "Adapter";
-
-        AdapterMeta meta = new AdapterMeta();
-        meta.setName(adapterClassName);
-        meta.setSymbolicName("com.poc." + schemeName.replace("-", ""));
-        meta.setVendor("Custom");
-        meta.setVersion("1.0.0");
-        meta.setDirection(promptLower.contains("sender") ? "sender" : "receiver");
-        meta.setScheme(schemeName);
-        meta.setPackagePath("com.poc." + schemeName.replace("-", ""));
-        spec.setAdapter(meta);
-
-        TargetMeta target = new TargetMeta(techName, "custom");
-        target.setCustomDependencies("    <!-- Target SDK dependencies dynamically requested for " + techName + " -->");
-        target.setExcludedImports("");
-        target.setProducerImports("");
-        target.setProducerImplementation("        LOG.info(\"Processing exchange message body payload for " + techName + "\");");
-        spec.setTarget(target);
-
-        spec.setAuthentication(new AuthenticationMeta("secure-parameter", "credentialAlias"));
-        spec.setRuntime(new RuntimeMeta("3.14.7", "2.2.0", "1.8"));
-
-        List<ConnectionParameter> params = new ArrayList<>();
-        params.add(new ConnectionParameter("endpointUrl", "Endpoint URL / Host", "string", true, "https://target.example.com", "Target system connection URL or host"));
-        params.add(new ConnectionParameter("credentialAlias", "Credential Alias", "secure-alias", true, "SECURE_CREDS", "SAP Secure Parameter Store alias"));
-        params.add(new ConnectionParameter("targetResource", "Target Resource / Table / Collection", "string", true, "default_resource", "Target payload destination"));
-        ConnectionMeta conn = new ConnectionMeta();
-        conn.setParameters(params);
-        spec.setConnection(conn);
-
-        spec.setOperations(List.of(new OperationConfig("EXECUTE", true, "Execute operation on " + techName)));
-        spec.setMessage(new MessageMeta("JSON", "TEXT"));
+        LOG.info("Delegating to LLMIntegrationService for prompt: {}", userPrompt);
+        AdapterSpecification spec = llmService.generateDynamicSpecification(userPrompt);
 
         Map<String, Object> result = new HashMap<>();
         result.put("specification", spec);
         result.put("technology", buildTechSummary(spec));
         result.put("missingFields", List.of());
-        result.put("parsedPromptSummary", "Dynamically created specification for: " + techName);
+        result.put("parsedPromptSummary", "Dynamically created specification for: " + userPrompt);
         result.put("aiEngine", "Dynamic Requirement Analyzer");
         return result;
     }
@@ -553,15 +624,11 @@ public class AiRequirementParserService {
     private String stripJsonMarkdown(String text) {
         if (text == null) return "";
         text = text.strip();
-        if (text.startsWith("```json")) {
-            text = text.substring(7);
-            int end = text.lastIndexOf("```");
-            if (end != -1) text = text.substring(0, end);
-        } else if (text.startsWith("```")) {
-            text = text.substring(3);
-            int end = text.lastIndexOf("```");
-            if (end != -1) text = text.substring(0, end);
+        int firstBrace = text.indexOf('{');
+        int lastBrace = text.lastIndexOf('}');
+        if (firstBrace != -1 && lastBrace != -1 && lastBrace >= firstBrace) {
+            return text.substring(firstBrace, lastBrace + 1);
         }
-        return text.strip();
+        return text;
     }
 }

@@ -2,13 +2,7 @@ import React, { useState } from 'react';
 import { Code2, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, Cpu } from 'lucide-react';
 
 export default function SpecificationViewer({ specification, onGenerate, onPrev, loading }) {
-  const [jsonText, setJsonText] = useState(() => JSON.stringify(specification || {}, null, 2));
-
-  React.useEffect(() => {
-    if (specification) {
-      setJsonText(JSON.stringify(specification, null, 2));
-    }
-  }, [specification]);
+  const [jsonText, setJsonText] = useState(JSON.stringify(specification, null, 2));
 
   const handleGenerate = () => {
     try {

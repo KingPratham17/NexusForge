@@ -1,0 +1,20 @@
+package com.sap.it.api.securestore;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class SecureStoreService {
+    
+    private static final Logger LOG = LoggerFactory.getLogger(SecureStoreService.class);
+
+    public UserCredential getUserCredential(String alias) {
+        LOG.info("Mock SecureStoreService: Retrieving UserCredential for alias '{}'", alias);
+        // Provide mock credentials for local testing
+        return new UserCredential("mock_user", "mock_password".toCharArray());
+    }
+
+    public OAuth2ClientCredential getOAuth2ClientCredential(String alias) {
+        LOG.info("Mock SecureStoreService: Retrieving OAuth2ClientCredential for alias '{}'", alias);
+        return new OAuth2ClientCredential("mock_token".toCharArray());
+    }
+}

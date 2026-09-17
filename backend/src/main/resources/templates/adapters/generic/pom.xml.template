@@ -5,16 +5,16 @@
 
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>{{packagePath}}</groupId>
-  <artifactId>{{artifactId}}</artifactId>
-  <version>{{adapterVersion}}</version>
+  <groupId>${packagePath}</groupId>
+  <artifactId>${artifactId}</artifactId>
+  <version>${adapterVersion}</version>
   <packaging>bundle</packaging>
 
   <name>${project.groupId}.${project.artifactId}</name>
 
   <properties>
-    <camel.version>{{camelVersion}}</camel.version>
-    <adk.version>{{adkVersion}}</adk.version>
+    <camel.version>${camelVersion}</camel.version>
+    <adk.version>${adkVersion}</adk.version>
     <generic.api.version>3.21.0</generic.api.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
@@ -108,7 +108,7 @@
     <!-- Add your target-system SDK dependencies here                 -->
     <!-- =========================================================== -->
 
-{{customDependencies}}
+${customDependencies}
 
   </dependencies>
 
@@ -142,8 +142,10 @@
             </Bundle-Version>
 
             <Export-Package>
-              {{packagePath}}
+              ${packagePath}
             </Export-Package>
+
+
 
             <!-- Embed all compile/runtime dependencies into lib/ -->
             <Embed-Dependency>
@@ -169,8 +171,7 @@
 
             <Import-Package>
               <!-- Embedded dependencies — exclude from OSGi imports -->
-              !com.fasterxml.jackson.*,
-{{excludedImports}}
+${excludedImports}
               <!-- SAP runtime supplied -->
               com.sap.it.api.*,
 
@@ -222,16 +223,50 @@
         <groupId>com.sap.cloud.adk</groupId>
         <artifactId>com.sap.cloud.adk.build.archive</artifactId>
         <version>${adk.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+            <version>2.3.1</version>
+          </dependency>
+          <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>2.3.1</version>
+          </dependency>
+          <dependency>
+            <groupId>javax.activation</groupId>
+            <artifactId>activation</artifactId>
+            <version>1.1.1</version>
+          </dependency>
+        </dependencies>
       </plugin>
 
     </plugins>
 
     <pluginManagement>
       <plugins>
-
+        <!-- Pin resources plugin to a Java 8 compatible version -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.3.1</version>
+        </plugin>
         <plugin>
           <groupId>com.sap.cloud.adk</groupId>
           <artifactId>com.sap.cloud.adk.build.archive</artifactId>
+          <dependencies>
+            <dependency>
+              <groupId>javax.xml.bind</groupId>
+              <artifactId>jaxb-api</artifactId>
+              <version>2.3.1</version>
+            </dependency>
+            <dependency>
+              <groupId>org.glassfish.jaxb</groupId>
+              <artifactId>jaxb-runtime</artifactId>
+              <version>2.3.1</version>
+            </dependency>
+          </dependencies>
 
           <executions>
 

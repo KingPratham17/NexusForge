@@ -62,11 +62,12 @@ public class MavenBuildWorkerService {
             boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
             String mvnCmd = isWindows ? "mvn.cmd" : "mvn";
 
-            ProcessBuilder pb = new ProcessBuilder(mvnCmd, "clean", "install", "-DskipTests", "-U");
+            ProcessBuilder pb = new ProcessBuilder(mvnCmd, "clean", "install", "-DskipTests");
+            pb.environment().put("JAVA_HOME", "C:\\Program Files\\Java\\jdk1.8.0_211");
             pb.directory(workspaceDir.toFile());
             pb.redirectErrorStream(true);
 
-            job.appendLog("Executing command: " + mvnCmd + " clean install -DskipTests -U");
+            job.appendLog("Executing command: " + mvnCmd + " clean install -DskipTests");
             Process process = pb.start();
 
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
