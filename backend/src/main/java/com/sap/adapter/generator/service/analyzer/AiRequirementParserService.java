@@ -86,14 +86,16 @@ public class AiRequirementParserService {
                     result.put("aiEngine", "Claude AI (" + modelName + " @ " + baseUrl + ")");
                     return result;
                 }
+                LOG.warn("Claude AI returned null specification");
+                return errorResult("AI Engine failed: Returned null specification");
             } catch (Exception e) {
-                LOG.warn("Claude AI call failed: {}. Falling back to dynamic spec generator.", e.getMessage());
+                LOG.error("Claude AI call failed: {}", e.getMessage(), e);
+                return errorResult("AI Engine failed: " + e.getMessage());
             }
         } else {
-            LOG.info("AI token not configured — using dynamic spec generator.");
+            LOG.warn("AI token not configured.");
+            return errorResult("AI Engine Unavailable: Token not configured");
         }
-
-        return buildDynamicFallback(userPrompt);
     }
 
     public TargetMeta autoFixRequirement(String errorLog, AdapterSpecification currentSpec, java.nio.file.Path workspaceDir) {
@@ -153,8 +155,10 @@ public class AiRequirementParserService {
                 if (!text.isBlank()) {
                     text = stripJsonMarkdown(text);
                     TargetMeta fixed = objectMapper.readValue(text.trim(), TargetMeta.class);
-                    LOG.info("Claude AI successfully returned auto-fix TargetMeta: tech={}, imports={}, implLength={}",
-                            fixed.getTechnology(), fixed.getProducerImports(), fixed.getProducerImplementation() != null ? fixed.getProducerImplementation().length() : 0);
+                    int producerImplLength = fixed.getProducerImplementation() != null ? fixed.getProducerImplementation().length() : 0;
+                    int consumerImplLength = fixed.getConsumerImplementation() != null ? fixed.getConsumerImplementation().length() : 0;
+                    LOG.info("Claude AI successfully returned auto-fix TargetMeta: tech={}, producerImplLength={}, consumerImplLength={}",
+                            fixed.getTechnology(), producerImplLength, consumerImplLength);
                     resultTarget = fixed;
                 }
             }
@@ -173,30 +177,14 @@ public class AiRequirementParserService {
         }
         TargetMeta target = currentSpec.getTarget();
         String deps = target.getCustomDependencies() != null ? target.getCustomDependencies() : "";
-        String imports = target.getProducerImports() != null ? target.getProducerImports() : "";
-        String impl = target.getProducerImplementation() != null ? target.getProducerImplementation() : "";
+        String prodImports = target.getProducerImports() != null ? target.getProducerImports() : "";
+        String prodImpl = target.getProducerImplementation() != null ? target.getProducerImplementation() : "";
+        String consImports = target.getConsumerImports() != null ? target.getConsumerImports() : "";
+        String consImpl = target.getConsumerImplementation() != null ? target.getConsumerImplementation() : "";
 
         boolean modified = false;
 
-        // 1. Fix invalid com.force.api groupId or missing Salesforce SDK
-        if (deps.contains("com.force.api") || (errorLog != null && errorLog.contains("force-rest-api"))) {
-            deps = deps.replaceAll("<groupId>com\\.force\\.api</groupId>", "<groupId>com.frejo</groupId>");
-            if (!deps.contains("httpclient")) {
-                deps += "\n    <dependency>\n      <groupId>org.apache.httpcomponents</groupId>\n      <artifactId>httpclient</artifactId>\n      <version>4.5.14</version>\n    </dependency>";
-            }
-            modified = true;
-        }
-
-        // 1b. Fix invalid Google Drive version hallucination (e.g. non-existent v3-rev20240815)
-        if (deps.contains("google-api-services-drive") || (errorLog != null && errorLog.contains("google-api-services-drive"))) {
-            if (deps.contains("v3-rev20240815") || (errorLog != null && errorLog.contains("v3-rev20240815"))) {
-                deps = deps.replaceAll("v3-rev20240815-[^<]+", "v3-rev20240809-2.0.0");
-                modified = true;
-            } else if (errorLog != null && errorLog.contains("Could not resolve dependencies")) {
-                deps = deps.replaceAll("(?s)(<artifactId>google-api-services-drive</artifactId>\\s*<version>)[^<]+(</version>)", "$1v3-rev20240809-2.0.0$2");
-                modified = true;
-            }
-        }
+        // Removed hardcoded target-specific logic for Salesforce and Google Drive as per Phase 3 requirements
 
         // 2. Strip duplicate jackson-databind if in customDependencies
         if (deps.contains("jackson-databind")) {
@@ -205,37 +193,52 @@ public class AiRequirementParserService {
         }
 
         // 3. Fix missing common imports reported in errorLog or implementation
-        if (errorLog != null || impl != null) {
-            if ((errorLog != null && errorLog.contains("IOException")) && !imports.contains("java.io.IOException")) {
-                imports += "\nimport java.io.IOException;";
-                modified = true;
+        if (errorLog != null || prodImpl != null || consImpl != null) {
+            if ((errorLog != null && errorLog.contains("IOException"))) {
+                if (!prodImports.contains("java.io.IOException")) { prodImports += "\nimport java.io.IOException;"; modified = true; }
+                if (!consImports.contains("java.io.IOException")) { consImports += "\nimport java.io.IOException;"; modified = true; }
             }
-            if ((errorLog != null && errorLog.contains("GeneralSecurityException")) && !imports.contains("GeneralSecurityException")) {
-                imports += "\nimport java.security.GeneralSecurityException;";
-                modified = true;
+            if ((errorLog != null && errorLog.contains("GeneralSecurityException"))) {
+                if (!prodImports.contains("GeneralSecurityException")) { prodImports += "\nimport java.security.GeneralSecurityException;"; modified = true; }
+                if (!consImports.contains("GeneralSecurityException")) { consImports += "\nimport java.security.GeneralSecurityException;"; modified = true; }
             }
-            if (((errorLog != null && errorLog.contains("ApiFuture")) || (impl != null && impl.contains("ApiFuture"))) && !imports.contains("ApiFuture")) {
-                imports += "\nimport com.google.api.core.ApiFuture;";
-                modified = true;
+            if ((errorLog != null && errorLog.contains("ApiFuture")) || (prodImpl != null && prodImpl.contains("ApiFuture")) || (consImpl != null && consImpl.contains("ApiFuture"))) {
+                if (!prodImports.contains("ApiFuture")) { prodImports += "\nimport com.google.api.core.ApiFuture;"; modified = true; }
+                if (!consImports.contains("ApiFuture")) { consImports += "\nimport com.google.api.core.ApiFuture;"; modified = true; }
             }
-            if (((errorLog != null && errorLog.contains("ExecutionException")) || (impl != null && impl.contains("ExecutionException"))) && !imports.contains("ExecutionException")) {
-                imports += "\nimport java.util.concurrent.ExecutionException;";
-                modified = true;
+            if ((errorLog != null && errorLog.contains("ExecutionException")) || (prodImpl != null && prodImpl.contains("ExecutionException")) || (consImpl != null && consImpl.contains("ExecutionException"))) {
+                if (!prodImports.contains("ExecutionException")) { prodImports += "\nimport java.util.concurrent.ExecutionException;"; modified = true; }
+                if (!consImports.contains("ExecutionException")) { consImports += "\nimport java.util.concurrent.ExecutionException;"; modified = true; }
             }
         }
 
         // 4. Fix common Java code hallucinations (e.g., duplicate variables, this.* references)
-        if (errorLog != null && errorLog.contains("cannot find symbol") && impl.contains("this.instanceUrl")) {
-            impl = impl.replace("this.instanceUrl", "instanceUrl");
-            modified = true;
+        if (errorLog != null && errorLog.contains("cannot find symbol")) {
+            if (prodImpl.contains("this.instanceUrl")) { prodImpl = prodImpl.replace("this.instanceUrl", "instanceUrl"); modified = true; }
+            if (consImpl.contains("this.instanceUrl")) { consImpl = consImpl.replace("this.instanceUrl", "instanceUrl"); modified = true; }
         }
-        if (errorLog != null && errorLog.contains("is already defined in method process") && impl.contains("String clientSecret =")) {
-            // Replace the second declaration with an assignment if it already exists
-            impl = impl.replaceFirst("(?s)String\\s+clientSecret\\s*=\\s*([^;]+;)(.*?)String\\s+clientSecret\\s*=", "String clientSecret = $1$2clientSecret =");
-            modified = true;
+        if (errorLog != null && errorLog.contains("is already defined in method process")) {
+            if (prodImpl.contains("String clientSecret =")) {
+                prodImpl = prodImpl.replaceFirst("(?s)String\\s+clientSecret\\s*=\\s*([^;]+;)(.*?)String\\s+clientSecret\\s*=", "String clientSecret = $1$2clientSecret =");
+                modified = true;
+            }
+            if (consImpl.contains("String clientSecret =")) {
+                consImpl = consImpl.replaceFirst("(?s)String\\s+clientSecret\\s*=\\s*([^;]+;)(.*?)String\\s+clientSecret\\s*=", "String clientSecret = $1$2clientSecret =");
+                modified = true;
+            }
+            if (prodImpl.contains("String token =")) {
+                prodImpl = prodImpl.replaceFirst("(?s)String\\s+token\\s*=\\s*([^;]+;)(.*?)String\\s+token\\s*=", "String token = $1$2token =");
+                modified = true;
+            }
+            if (consImpl.contains("String token =")) {
+                consImpl = consImpl.replaceFirst("(?s)String\\s+token\\s*=\\s*([^;]+;)(.*?)String\\s+token\\s*=", "String token = $1$2token =");
+                modified = true;
+            }
         }
-        if (errorLog != null && errorLog.contains("is already defined in method process") && impl.contains("String token =")) {
-            impl = impl.replaceFirst("(?s)String\\s+token\\s*=\\s*([^;]+;)(.*?)String\\s+token\\s*=", "String token = $1$2token =");
+
+        // 5. Strip duplicate return statement from consumer implementation
+        if (consImpl.contains("return messagesProcessed;")) {
+            consImpl = consImpl.replace("return messagesProcessed;", "").trim();
             modified = true;
         }
 
@@ -246,8 +249,10 @@ public class AiRequirementParserService {
             fixed.setCategory(target.getCategory());
             fixed.setCustomDependencies(deps);
             fixed.setExcludedImports(target.getExcludedImports());
-            fixed.setProducerImports(imports);
-            fixed.setProducerImplementation(impl);
+            fixed.setProducerImports(prodImports);
+            fixed.setProducerImplementation(prodImpl);
+            fixed.setConsumerImports(consImports);
+            fixed.setConsumerImplementation(consImpl);
             return fixed;
         }
 
@@ -332,7 +337,9 @@ public class AiRequirementParserService {
                 1. If a dependency failed to download ("Could not find artifact ... in central"), verify the exact groupId/artifactId or replace it with standard Apache HttpClient ('org.apache.httpcomponents:httpclient:4.5.14'). For Salesforce REST, use 'com.frejo:force-rest-api:0.0.45' or standard Apache HttpClient. Never use 'com.force.api:force-rest-api'. For Google Drive API, use known version 'v3-rev20240809-2.0.0'. Never hallucinate unreleased dates like 'v3-rev20240815-2.0.0'.
                 2. Do not include jackson-databind or slf4j in customDependencies (they are already provided by the base POM).
                 3. Ensure all Java classes used in the implementations (e.g. IOException) are explicitly imported.
-                4. Variables declared in the TEMPLATE-OWNED section (like parameter strings declared in paramReadLines) ALREADY exist and are immutable. Do NOT redefine them in your AI-EDITABLE snippet (e.g., if `String maxMessages` is already declared in the template, do not redeclare it, and do not assign an `int` to it). If you need an integer, declare a NEW distinct variable name (e.g. `int maxMessagesLimit = Integer.parseInt(...)`).
+                4. Variables declared in the TEMPLATE-OWNED section (like parameter strings declared in paramReadLines, endpoint, LOG, messagesProcessed) ALREADY exist and are immutable. Do NOT redefine them in your AI-EDITABLE snippet (e.g., if `String maxMessages` is already declared in the template, do not redeclare it, and do not assign an `int` to it). If you need an integer, declare a NEW distinct variable name (e.g. `int maxMessagesLimit = Integer.parseInt(...)`).
+                5. Preserve and ensure strict runtime observability logging as specified in the original generation prompt (log stages, no secrets, rethrow exceptions).
+                6. EXCEPTION HANDLING: The method signature is `public void process(Exchange exchange) throws Exception`. You may allow checked exceptions to propagate. You do NOT need to catch them and wrap them in a RuntimeException. Do not swallow errors.
                 
                 Return ONLY valid JSON matching this structure (no markdown, no preamble):
                 {
@@ -484,13 +491,55 @@ public class AiRequirementParserService {
                 4. IMPLEMENTATION (SENDER OR RECEIVER):
                    - IF DIRECTION IS RECEIVER (Sending to target):
                      Populate `producerImplementation`. The ONLY job is to PUBLISH / SEND / WRITE the incoming Camel payload to the target system. NEVER write subscription or listener logic.
+                     RECEIVER RUNTIME OBSERVABILITY (MANDATORY LOGGING):
+                     * Log credential/client initialization stages.
+                     * Log immediately before sending/writing to target.
+                     * Log successful target response.
+                     * NEVER log secret contents.
+                     * Rethrow target failures (never swallow exceptions).
                    - IF DIRECTION IS SENDER (Polling/Listening from target):
                      Populate `consumerImplementation`. The ONLY job is to POLL or LISTEN for incoming data and push it into the Camel route by calling `processMessage(payloadString)`.
-                     CRITICAL SENDER RULES:
-                     * You MUST initialize `ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();` and use it to convert Maps/Objects to proper JSON strings before calling `processMessage`. NEVER use `.toString()` to serialize payloads!
+                     CRITICAL SENDER STAGES AND RUNTIME OBSERVABILITY (MANDATORY LOGGING):
+                     Distinguish these stages explicitly in the code:
+                     1. Configuration: Log entry into polling implementation, log configured non-secret connection parameters.
+                     2. Authentication: Log immediately before authentication/credential lookup, log successful credential retrieval without secret contents.
+                     3. Target Client Initialization: Log immediately before external client initialization, log successful client initialization.
+                     4. Target Request/Poll: Log immediately before external API/database/message-broker request, log successful external request completion, log number of records/messages/documents returned when applicable.
+                     5. Result Extraction & 6. Payload Serialization: Log immediately before processMessage(...), log payload length/type only; NEVER log credentials or private keys. You MUST initialize `ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();` and use it to convert Maps/Objects to proper JSON strings before calling `processMessage`. NEVER use `.toString()` to serialize payloads!
+                     7. ProcessMessage & 8. MessagesProcessed: Call `processMessage(payload)`, increment `messagesProcessed` for every emitted message, log final `messagesProcessed` count.
+                     
+                     STRICT CONSUMER IMPLEMENTATION CONTRACT:
+                     `consumerImplementation` must be a TARGET-SPECIFIC CODE FRAGMENT ONLY.
+                     It is inserted into an existing `poll()` method.
+                     The generic template already provides and owns:
+                     - endpoint parameter variables
+                     - parameter validation
+                     - the `messagesProcessed` variable declaration
+                     - the `processMessage(Object)` method implementation
+                     - the final `return messagesProcessed;` statement
+                     - exception handling, `ScheduledPollConsumer` lifecycle, and TCCL structure
+
+                     Therefore, YOU MUST NOT GENERATE ANY OF THESE TEMPLATE-OWNED CONSTRUCTS.
+
+                     VALID `consumerImplementation` output:
+                     ```java
+                     Firestore firestore = ...
+                     QuerySnapshot snapshot = ...
+                     String payload = ...
+                     processMessage(payload);
+                     messagesProcessed++;
+                     ```
+
+                     INVALID `consumerImplementation` output (DO NOT EMIT THESE):
+                     ```java
+                     int messagesProcessed = 0; // INVALID (already declared)
+                     return messagesProcessed; // INVALID (owned by template)
+                     try { ... } catch (Exception e) { ... } finally { ... } // INVALID (do not wrap entire block)
+                     public void processMessage(...) { ... } // INVALID (owned by template)
+                     ```
+
+                     * Never swallow target-system exceptions inside the block.
                      * You MUST enforce limits! If there is a parameter like `maxDocuments` or `maxResults`, you MUST parse it (e.g. `int limit = Integer.parseInt(endpoint.getMaxDocuments());`) and apply it to the query.
-                     * You MUST increment `messagesProcessed++` inside the loop for every document processed, otherwise the poll method will return 0 and break.
-                     Example: `for (Object obj : results) { String payload = objectMapper.writeValueAsString(obj); processMessage(payload); messagesProcessed++; }`
                      Do NOT populate `producerImplementation` if it is a Sender.
                    - URI PROTOCOL: Connection URLs (e.g. `brokerUrl`, `serverUrl`) must be checked for protocol schemes. If `!brokerUrl.contains("://")`, prepend `"tcp://"` (e.g. `String serverURI = brokerUrl.contains("://") ? brokerUrl : "tcp://" + brokerUrl;`).
                    - METHOD VARIABLES: The following variables ALREADY exist in method scope and must NOT be re-declared:
@@ -505,8 +554,9 @@ public class AiRequirementParserService {
                      `com.sap.it.api.securestore.UserCredential cred = secureStoreService.getUserCredential(endpoint.getCredentialAlias());`
                      `String secret = new String(cred.getPassword());`
                      DO NOT USE `new String(password, StandardCharsets.UTF_8)` when passing a `char[]`. Just use `new String(password)`.
+                   - EXCEPTION HANDLING: The method signature is `public void process(Exchange exchange) throws Exception`. You may allow checked exceptions to propagate. You do NOT need to catch them and wrap them in a RuntimeException. Do not swallow errors.
                    - CLEANUP: Always disconnect and close client instances before returning.
-                5. Connection parameters: Generate 3-6 parameters specific to the target technology. For any boolean flag parameters, set `"type": "boolean"` and `"defaultValue": "true"` or `"false"` so SAP Integration Suite UI renders a native Checkbox control. If max limit is needed, generate `maxDocuments` parameter.
+                5. Connection parameters: Generate ALL connection parameters required by the target technology. Do NOT artificially limit the number of parameters. If the technology requires 10 parameters, generate 10. For any boolean flag parameters, set `"type": "boolean"` and `"defaultValue": "true"` or `"false"` so SAP Integration Suite UI renders a native Checkbox control. If max limit is needed, generate `maxDocuments` parameter.
                 6. ZERO-RAW-CREDENTIALS POLICY (MANDATORY): In SAP Cloud Integration (CPI), NEVER ask for raw passwords, raw private keys, or raw JSON files. All authentication MUST use a Credential Alias parameter (`"type": "secure-alias"`, `"name": "credentialAlias"`, `"label": "Credential Alias"`, `"defaultValue": "SAP_SECURE_ALIAS"`, `"description": "Deployed Security Material alias in SAP Cloud Integration").
                 7. DROPDOWNS (MANDATORY): If a connection parameter has a fixed set of allowed values (e.g. HTTP Method, QoS Level, Environment), set `"type": "dropdown"` and provide those exact choices in an `"options": ["Choice A", "Choice B"]` array.
                 8. PAYLOAD ACCESS: The generated implementation MUST NOT assume that variables such as body, payload, message, data, or requestBody already exist in scope. If the implementation needs the Camel message payload, it MUST explicitly obtain it from the provided Exchange object. Examples: `String body = exchange.getIn().getBody(String.class);` or `byte[] body = exchange.getIn().getBody(byte[].class);` or `Object body = exchange.getIn().getBody();` Choose the representation appropriate for the target technology. The generic Producer/Consumer templates must remain payload-agnostic. Payload extraction and conversion belong inside the AI-generated technology-specific implementation.
@@ -544,13 +594,7 @@ public class AiRequirementParserService {
         if (spec != null && spec.getConnection() != null && spec.getConnection().getParameters() != null) {
             for (ConnectionParameter p : spec.getConnection().getParameters()) {
                 String name = p.getName() != null ? p.getName().toLowerCase() : "";
-                boolean isSensitive = "secure-alias".equalsIgnoreCase(p.getType())
-                        || name.contains("password")
-                        || name.contains("secret")
-                        || name.contains("key")
-                        || name.contains("token")
-                        || name.contains("credential")
-                        || name.contains("serviceaccount");
+                boolean isSensitive = "secure-alias".equalsIgnoreCase(p.getType());
                 if (isSensitive) {
                     p.setType("secure-alias");
                     if (p.getDefaultValue() == null || p.getDefaultValue().isBlank()) {

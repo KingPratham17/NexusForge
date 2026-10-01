@@ -12,6 +12,11 @@ import java.nio.file.Path;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Stream;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 /**
  * Validates generated SAP Cloud Integration Custom Adapter artifacts
@@ -137,26 +142,86 @@ public class ArtifactValidatorService {
         // ----------------------------------------------------------------
         boolean check6 = false;
         String check6Detail = "No embedded lib/ dependencies found in JAR";
-        if (jarFile != null && Files.exists(jarFile)) {
-            try (JarFile jar = new JarFile(jarFile.toFile())) {
-                long libCount = jar.stream()
-                        .filter(e -> e.getName().startsWith("lib/") && e.getName().endsWith(".jar"))
-                        .count();
-                if (libCount > 0) {
-                    check6 = true;
-                    check6Detail = "Verified " + libCount + " runtime dependency JARs embedded under lib/";
-                } else {
-                    // Jackson embedded directly as class files is also acceptable
-                    long jacksonClasses = jar.stream()
-                            .filter(e -> e.getName().contains("jackson") || e.getName().startsWith("lib/"))
-                            .count();
-                    if (jacksonClasses > 0) {
-                        check6 = true;
-                        check6Detail = "Runtime dependencies verified (embedded into bundle classes)";
+
+        boolean requiresEmbeddedLibs = false;
+        Path pomPath = workspaceDir.resolve("pom.xml");
+        if (Files.exists(pomPath)) {
+            try {
+                DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+                dbFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+                DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+                Document doc = dBuilder.parse(pomPath.toFile());
+                doc.getDocumentElement().normalize();
+
+                NodeList topLevelNodes = doc.getDocumentElement().getChildNodes();
+                Element dependenciesElement = null;
+                for (int i = 0; i < topLevelNodes.getLength(); i++) {
+                    if (topLevelNodes.item(i) instanceof Element) {
+                        Element el = (Element) topLevelNodes.item(i);
+                        if ("dependencies".equals(el.getTagName())) {
+                            dependenciesElement = el;
+                            break;
+                        }
+                    }
+                }
+
+                if (dependenciesElement != null) {
+                    NodeList depNodes = dependenciesElement.getElementsByTagName("dependency");
+                    for (int i = 0; i < depNodes.getLength(); i++) {
+                        Element depElement = (Element) depNodes.item(i);
+                        
+                        String groupId = getElementValue(depElement, "groupId");
+                        String artifactId = getElementValue(depElement, "artifactId");
+                        String scope = getElementValue(depElement, "scope");
+                        
+                        // Ignore SAP ADK, generic API, camel, and slf4j dependencies
+                        if (groupId != null && (groupId.equals("com.sap.cloud.adk") 
+                                || groupId.equals("org.apache.camel") 
+                                || groupId.equals("org.slf4j") 
+                                || groupId.equals("log4j"))) {
+                            continue;
+                        }
+
+                        // Ignore provided or test scoped dependencies
+                        if ("provided".equals(scope) || "test".equals(scope)) {
+                            continue;
+                        }
+                        
+                        requiresEmbeddedLibs = true;
+                        break;
                     }
                 }
             } catch (Exception e) {
-                check6Detail = "Error inspecting JAR for libs: " + e.getMessage();
+                LOG.warn("Failed to parse pom.xml for dependency check", e);
+            }
+        }
+
+        if (!requiresEmbeddedLibs) {
+            check6 = true;
+            check6Detail = "No embedded third-party libraries required for this adapter.";
+        } else {
+            check6Detail = "No embedded lib/ dependencies found in JAR, but required by POM.";
+            if (jarFile != null && Files.exists(jarFile)) {
+                try (JarFile jar = new JarFile(jarFile.toFile())) {
+                    long libCount = jar.stream()
+                            .filter(e -> e.getName().startsWith("lib/") && e.getName().endsWith(".jar"))
+                            .count();
+                    if (libCount > 0) {
+                        check6 = true;
+                        check6Detail = "Verified " + libCount + " runtime dependency JARs embedded under lib/";
+                    } else {
+                        // For backwards compatibility or shaded JARs (like Jackson embedded directly)
+                        long jacksonClasses = jar.stream()
+                                .filter(e -> e.getName().contains("jackson") || e.getName().startsWith("lib/"))
+                                .count();
+                        if (jacksonClasses > 0) {
+                            check6 = true;
+                            check6Detail = "Runtime dependencies verified (embedded into bundle classes)";
+                        }
+                    }
+                } catch (Exception e) {
+                    check6Detail = "Error inspecting JAR for libs: " + e.getMessage();
+                }
             }
         }
         report.addCheck(6, "OSGi Dependency Embedding (lib/)", check6, check6Detail);
@@ -246,8 +311,7 @@ public class ArtifactValidatorService {
             boolean leakFound = stream.filter(Files::isRegularFile).anyMatch(p -> {
                 try {
                     String c = Files.readString(p, StandardCharsets.UTF_8);
-                    return c.contains("private_key") || c.contains("-----BEGIN PRIVATE KEY-----")
-                            || c.contains("password=") || c.contains("apiKey=");
+                    return SecurityScanner.containsHardcodedCredentials(c);
                 } catch (Exception e) {
                     return false;
                 }
@@ -292,6 +356,20 @@ public class ArtifactValidatorService {
         }
         report.addCheck(13, "SAP API Stub Contamination", check13, check13Detail);
 
+        for (com.sap.adapter.generator.model.build.InspectionCheckItem item : report.getCheckItems()) {
+            if (!item.isPassed()) {
+                throw new IllegalStateException(String.format("Artifact Inspection Failed (Check %d: %s) -> %s", item.getCheckNumber(), item.getCheckName(), item.getDetails()));
+            }
+        }
+
         return report;
+    }
+
+    private String getElementValue(Element parent, String tagName) {
+        NodeList nodeList = parent.getElementsByTagName(tagName);
+        if (nodeList != null && nodeList.getLength() > 0) {
+            return nodeList.item(0).getTextContent();
+        }
+        return null;
     }
 }

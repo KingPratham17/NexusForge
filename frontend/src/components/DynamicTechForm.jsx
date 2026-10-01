@@ -78,22 +78,24 @@ export default function DynamicTechForm({ parsedResult, onNext, onPrev }) {
       </div>
 
       {/* AI Summary Banner */}
-      <div style={{
-        padding: '14px 18px', borderRadius: '10px', marginBottom: '24px',
-        background: isAiGenerated ? 'linear-gradient(135deg, #eff6ff, #f5f3ff)' : '#fefce8',
-        border: `1px solid ${isAiGenerated ? '#bfdbfe' : '#fde68a'}`,
-        display: 'flex', alignItems: 'flex-start', gap: '12px'
-      }}>
-        {isAiGenerated ? <Brain size={18} color="#2563eb" style={{ marginTop: '1px', flexShrink: 0 }} /> : <Cpu size={18} color="#d97706" style={{ marginTop: '1px', flexShrink: 0 }} />}
-        <div>
-          <div style={{ fontSize: '12.5px', fontWeight: '600', color: isAiGenerated ? '#1d4ed8' : '#92400e', marginBottom: '3px' }}>
-            {aiEngine}
-          </div>
-          <div style={{ fontSize: '12.5px', color: isAiGenerated ? '#3730a3' : '#78350f', lineHeight: '1.5' }}>
-            {summary}
+      {(aiEngine || summary) && (
+        <div style={{
+          padding: '14px 18px', borderRadius: '10px', marginBottom: '24px',
+          background: isAiGenerated ? 'linear-gradient(135deg, #eff6ff, #f5f3ff)' : '#fefce8',
+          border: `1px solid ${isAiGenerated ? '#bfdbfe' : '#fde68a'}`,
+          display: 'flex', alignItems: 'flex-start', gap: '12px'
+        }}>
+          {isAiGenerated ? <Brain size={18} color="#2563eb" style={{ marginTop: '1px', flexShrink: 0 }} /> : <Cpu size={18} color="#d97706" style={{ marginTop: '1px', flexShrink: 0 }} />}
+          <div>
+            <div style={{ fontSize: '12.5px', fontWeight: '600', color: isAiGenerated ? '#1d4ed8' : '#92400e', marginBottom: '3px' }}>
+              {aiEngine}
+            </div>
+            <div style={{ fontSize: '12.5px', color: isAiGenerated ? '#3730a3' : '#78350f', lineHeight: '1.5' }}>
+              {summary}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Target System Card */}
       <div className="glass-card" style={{

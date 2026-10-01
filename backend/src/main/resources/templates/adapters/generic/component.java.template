@@ -21,8 +21,52 @@ public class ${adapterClassName}Component extends DefaultComponent {
             final Map<String, Object> parameters) throws Exception {
 
         LOG.info("Creating endpoint for ${adapterName} adapter");
-        final Endpoint endpoint = new ${adapterClassName}Endpoint(uri, remaining, this);
-        setProperties(endpoint, parameters);
-        return endpoint;
+        LOG.info("createEndpoint() started for URI: {}", uri);
+        if (parameters != null) {
+            LOG.info("Received parameter names: {}", parameters.keySet());
+        } else {
+            LOG.info("Received parameter names: null");
+        }
+
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+        ClassLoader bundleClassLoader = this.getClass().getClassLoader();
+
+        try {
+            Thread.currentThread().setContextClassLoader(bundleClassLoader);
+            LOG.info("ContextClassLoaderGuard Diagnostics (createEndpoint): Original TCCL = {}, Bundle ClassLoader = {}", originalClassLoader, bundleClassLoader);
+
+            final Endpoint endpoint;
+            try {
+                endpoint = new ${adapterClassName}Endpoint(uri, remaining, this);
+                LOG.info("Instantiated endpoint class: {}", endpoint.getClass().getName());
+                setProperties(endpoint, parameters);
+            } catch (Throwable e) {
+                LOG.error("Endpoint creation or setProperties failed!", e);
+                LOG.error("Exception class: {}", e.getClass().getName());
+                LOG.error("Exception message: {}", e.getMessage());
+                LOG.error("Received parameter names at failure: {}", parameters != null ? parameters.keySet() : "null");
+                
+                Throwable cause = e.getCause();
+                int depth = 1;
+                while (cause != null) {
+                    LOG.error("Cause [{}]: {} - {}", new Object[]{depth, cause.getClass().getName(), cause.getMessage()});
+                    cause = cause.getCause();
+                    depth++;
+                }
+                
+                if (e instanceof Exception) {
+                    throw (Exception) e;
+                } else if (e instanceof Error) {
+                    throw (Error) e;
+                } else {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            return endpoint;
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+            LOG.info("ContextClassLoaderGuard Diagnostics (createEndpoint): Restored TCCL = {}", Thread.currentThread().getContextClassLoader());
+        }
     }
 }

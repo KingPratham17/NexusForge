@@ -17,7 +17,7 @@ public class BuildJob {
     private String adapterName;
     private String workspacePath;
     private Status status = Status.INITIALIZED;
-    private StringBuilder buildLogs = new StringBuilder();
+    private StringBuffer buildLogs = new StringBuffer();
     private InspectionReport inspectionReport;
     private LocalDateTime createdAt = LocalDateTime.now();
     private long durationMs;

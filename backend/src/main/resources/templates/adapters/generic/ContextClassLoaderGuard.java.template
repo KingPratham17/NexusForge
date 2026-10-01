@@ -1,0 +1,72 @@
+package ${packagePath};
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Iterator;
+import java.util.ServiceLoader;
+import java.util.concurrent.Callable;
+
+/**
+ * Generic ContextClassLoader guard utility to protect target SDK execution in OSGi.
+ * Safely switches the Thread Context ClassLoader (TCCL) to the adapter's Bundle ClassLoader,
+ * ensuring that embedded non-OSGi JARs (which rely on ServiceLoader SPIs) can resolve
+ * their dependencies properly in strict OSGi containers like SAP Cloud Integration.
+ */
+public class ContextClassLoaderGuard {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ContextClassLoaderGuard.class);
+
+    public static <T> T executeWithTCCL(ClassLoader bundleClassLoader, Callable<T> task) throws Exception {
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+        
+        LOG.info("ContextClassLoaderGuard Diagnostics: Original TCCL = {}, Target BundleClassLoader = {}", 
+                  originalClassLoader, bundleClassLoader);
+        
+        if (originalClassLoader == bundleClassLoader) {
+            LOG.info("ContextClassLoaderGuard Diagnostics: TCCL is already the target classloader. No switch needed.");
+        } else {
+            LOG.info("ContextClassLoaderGuard Diagnostics: Switching TCCL to {}", bundleClassLoader);
+            Thread.currentThread().setContextClassLoader(bundleClassLoader);
+        }
+
+        try {
+            return task.call();
+        } catch (Throwable e) {
+            LOG.error("ContextClassLoaderGuard Diagnostics: Execution failed during target SDK execution. Type: {}, Message: {}", new Object[]{e.getClass().getName(), e.getMessage(), e});
+            if (e instanceof Exception) {
+                throw (Exception) e;
+            } else if (e instanceof Error) {
+                throw (Error) e;
+            } else {
+                throw new RuntimeException(e);
+            }
+        } finally {
+            if (Thread.currentThread().getContextClassLoader() != originalClassLoader) {
+                LOG.info("ContextClassLoaderGuard Diagnostics: Restoring original TCCL to {}", originalClassLoader);
+                Thread.currentThread().setContextClassLoader(originalClassLoader);
+            }
+        }
+    }
+
+    public static void executeWithTCCL(ClassLoader bundleClassLoader, Runnable task) throws Exception {
+        executeWithTCCL(bundleClassLoader, () -> {
+            task.run();
+            return null;
+        });
+    }
+
+    /**
+     * Diagnostic method to test ServiceLoader visibility under a specific classloader.
+     */
+    public static <S> boolean canLoadService(Class<S> serviceClass, ClassLoader classLoader) {
+        try {
+            ServiceLoader<S> loader = ServiceLoader.load(serviceClass, classLoader);
+            Iterator<S> it = loader.iterator();
+            return it.hasNext();
+        } catch (Exception e) {
+            LOG.warn("ContextClassLoaderGuard Diagnostics: ServiceLoader check failed for class {}", serviceClass.getName(), e);
+            return false;
+        }
+    }
+}

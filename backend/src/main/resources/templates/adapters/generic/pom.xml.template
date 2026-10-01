@@ -191,7 +191,8 @@ ${excludedImports}
 
               <!-- Cloud Integration runtime supplied -->
               org.apache.camel.*,
-              org.slf4j.*
+              org.slf4j.*,
+              *
 
             </Import-Package>
 

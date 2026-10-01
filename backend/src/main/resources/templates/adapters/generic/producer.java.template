@@ -29,25 +29,27 @@ public class ${adapterClassName}Producer extends DefaultProducer {
 
         LOG.info("=== ${adapterName} Adapter Producer Processing Payload ===");
 
-        // ---------------------------------------------------------
-        // 1. Read adapter configuration parameters
-        // ---------------------------------------------------------
+        ContextClassLoaderGuard.executeWithTCCL(this.getClass().getClassLoader(), (java.util.concurrent.Callable<Void>) () -> {
+            // ---------------------------------------------------------
+            // 1. Read adapter configuration parameters
+            // ---------------------------------------------------------
 
 ${paramReadLines}
 
-        // ---------------------------------------------------------
-        // 2. Validate adapter configuration
-        // ---------------------------------------------------------
+            // ---------------------------------------------------------
+            // 2. Validate adapter configuration
+            // ---------------------------------------------------------
 
 ${paramValidations}
 
-        // ---------------------------------------------------------
-        // 3. Target-Specific Execution Logic for ${targetTechnology}
-        // ---------------------------------------------------------
-        // The payload parsing, type conversion, and API interactions
-        // are strictly determined by the AI specification.
+            // ---------------------------------------------------------
+            // 3. Target-Specific Execution Logic for ${targetTechnology}
+            // ---------------------------------------------------------
+            // The payload parsing, type conversion, and API interactions
+            // are strictly determined by the AI specification.
 
 ${producerImplementation}
-
+            return null;
+        });
     }
 }

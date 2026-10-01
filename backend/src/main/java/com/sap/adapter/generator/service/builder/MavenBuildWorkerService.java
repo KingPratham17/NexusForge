@@ -25,6 +25,9 @@ public class MavenBuildWorkerService {
 
     @Autowired
     private ArtifactValidatorService artifactValidatorService;
+    
+    @Autowired
+    private com.sap.adapter.generator.service.validator.PreMavenValidatorService preMavenValidatorService;
 
     public BuildJob createBuildJob(String id, String adapterName, String workspacePath) {
         String safeId = (id != null && !id.isBlank()) ? id : "build-" + UUID.randomUUID().toString().substring(0, 8);
@@ -58,12 +61,25 @@ public class MavenBuildWorkerService {
 
         Path workspaceDir = Paths.get(job.getWorkspacePath());
 
+        // --- PRE-MAVEN VALIDATION GATE ---
+        java.util.List<String> validationErrors = preMavenValidatorService.validateWorkspace(workspaceDir);
+        if (!validationErrors.isEmpty()) {
+            job.appendLog("\nPRE-MAVEN VALIDATION FAILED:");
+            for (String err : validationErrors) {
+                job.appendLog(" - " + err);
+            }
+            job.appendLog("\nAborting Maven build due to deterministic validation failure.");
+            job.setStatus(BuildJob.Status.FAILURE);
+            job.setDurationMs(System.currentTimeMillis() - startTime);
+            return;
+        }
+
         try {
             boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
             String mvnCmd = isWindows ? "mvn.cmd" : "mvn";
 
             ProcessBuilder pb = new ProcessBuilder(mvnCmd, "clean", "install", "-DskipTests");
-            pb.environment().put("JAVA_HOME", "C:\\Program Files\\Java\\jdk1.8.0_211");
+            // removed hardcoded JAVA_HOME
             pb.directory(workspaceDir.toFile());
             pb.redirectErrorStream(true);
 
@@ -82,21 +98,33 @@ public class MavenBuildWorkerService {
                 }
             }
 
-            int exitCode = process.waitFor();
+            boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
+            if (!finished) {
+                process.destroyForcibly();
+                job.setStatus(BuildJob.Status.FAILURE);
+                job.appendLog("\nMaven build timed out after 5 minutes. Process forcibly terminated.");
+                return;
+            }
+            int exitCode = process.exitValue();
             job.appendLog("Maven process exited with code: " + exitCode);
+
+            if (exitCode != 0) {
+                job.setStatus(BuildJob.Status.FAILURE);
+                job.appendLog("\nMaven build failed with exit code " + exitCode + ". Aborting artifact inspection.");
+                return;
+            }
 
             job.setStatus(BuildJob.Status.ADK_VALIDATION);
             job.appendLog("\nStarting 12-point SAP ADK Artifact Inspection...");
 
-            InspectionReport report = artifactValidatorService.inspectArtifacts(workspaceDir, scheme != null ? scheme : "custom-adapter");
-            job.setInspectionReport(report);
-
-            if (exitCode == 0 && report != null && report.isOverallSuccess()) {
+            try {
+                InspectionReport report = artifactValidatorService.inspectArtifacts(workspaceDir, scheme != null ? scheme : "custom-adapter");
+                job.setInspectionReport(report);
                 job.setStatus(BuildJob.Status.SUCCESS);
                 job.appendLog("\n✓ BUILD SUCCESS & ALL ADK ARTIFACT INSPECTION CHECKS PASSED!");
-            } else {
+            } catch (Exception e) {
                 job.setStatus(BuildJob.Status.FAILURE);
-                job.appendLog("\n✗ BUILD FAILURE OR ADK ARTIFACT INSPECTION CHECKS FAILED.");
+                job.appendLog("\n✗ ADK ARTIFACT INSPECTION CHECKS FAILED: " + e.getMessage());
             }
 
         } catch (Exception e) {

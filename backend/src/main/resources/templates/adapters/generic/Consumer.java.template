@@ -30,33 +30,35 @@ public class ${adapterClassName}Consumer extends ScheduledPollConsumer {
     protected int poll() throws Exception {
         LOG.info("=== ${adapterName} Adapter Consumer Polling ===");
 
-        // ---------------------------------------------------------
-        // 1. Read adapter configuration parameters
-        // ---------------------------------------------------------
+        return ContextClassLoaderGuard.executeWithTCCL(this.getClass().getClassLoader(), () -> {
+            // ---------------------------------------------------------
+            // 1. Read adapter configuration parameters
+            // ---------------------------------------------------------
 
 ${paramReadLines}
 
-        // ---------------------------------------------------------
-        // 2. Validate adapter configuration
-        // ---------------------------------------------------------
+            // ---------------------------------------------------------
+            // 2. Validate adapter configuration
+            // ---------------------------------------------------------
 
 ${paramValidations}
 
-        // ---------------------------------------------------------
-        // 3. Target-Specific Polling Logic for ${targetTechnology}
-        // ---------------------------------------------------------
-        
-        int messagesProcessed = 0;
+            // ---------------------------------------------------------
+            // 3. Target-Specific Polling Logic for ${targetTechnology}
+            // ---------------------------------------------------------
+            
+            int messagesProcessed = 0;
 
 ${consumerImplementation}
 
-        return messagesProcessed;
+            return messagesProcessed;
+        });
     }
 
     /**
      * Helper method to process an incoming payload string
      */
-    protected void processMessage(Object payload) {
+    protected void processMessage(Object payload) throws Exception {
         if (payload == null) {
             return;
         }
@@ -64,15 +66,11 @@ ${consumerImplementation}
         Exchange exchange = endpoint.createExchange();
         exchange.getIn().setBody(payload);
 
-        try {
-            LOG.info("Processing incoming message...");
-            getProcessor().process(exchange);
-        } catch (Exception e) {
-            exchange.setException(e);
-        }
+        LOG.info("Processing incoming message...");
+        getProcessor().process(exchange);
 
         if (exchange.getException() != null) {
-            getExceptionHandler().handleException("Error processing exchange", exchange, exchange.getException());
+            throw exchange.getException();
         }
     }
 }

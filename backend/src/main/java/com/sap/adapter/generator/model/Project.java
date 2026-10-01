@@ -21,9 +21,9 @@ public class Project {
     private String technology;
     private String direction; // e.g. receiver
     
-    private Integer currentStep = 1;
+    private Integer currentStep;
 
-    private String status = "DRAFT"; // DRAFT, IN_PROGRESS, BUILDING, READY, FAILED
+    private String status; // DRAFT, IN_PROGRESS, BUILDING, READY, SAVED, FAILED
     
     @Column(columnDefinition = "LONGTEXT")
     private String requirement;
@@ -34,8 +34,14 @@ public class Project {
     private String buildId; // Reference to GenerationSession/Build output
 
     private LocalDateTime lastUpdated;
+    private LocalDateTime createdAt;
 
     @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.lastUpdated = LocalDateTime.now();
+    }
+
     @PreUpdate
     public void preUpdate() {
         this.lastUpdated = LocalDateTime.now();
@@ -74,4 +80,7 @@ public class Project {
 
     public LocalDateTime getLastUpdated() { return lastUpdated; }
     public void setLastUpdated(LocalDateTime lastUpdated) { this.lastUpdated = lastUpdated; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

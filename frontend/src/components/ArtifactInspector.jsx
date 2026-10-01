@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCheck, CheckCircle2, XCircle, Download, RotateCcw, PackageCheck, FileArchive } from 'lucide-react';
-import { getEsaDownloadUrl } from '../services/api';
+import { downloadEsa } from '../services/api';
 
 export default function ArtifactInspector({ buildJob, onReset }) {
   const report = buildJob?.inspectionReport;
@@ -11,7 +11,7 @@ export default function ArtifactInspector({ buildJob, onReset }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
           <h2 style={{ fontSize: '17px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCheck size={20} color="#059669" /> Step 6: 12-Point ADK Artifact Inspection Report
+            <CheckCheck size={20} color="#059669" /> Step 6: {report?.totalChecks || 13}-Point Adapter Artifact Inspection Report
           </h2>
           <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
             Empirical verification of OSGi bundle manifest headers, Camel service descriptors, dependency embeddings, and ESA subsystem structure.
@@ -20,7 +20,7 @@ export default function ArtifactInspector({ buildJob, onReset }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span className={`badge ${report?.overallSuccess ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '13px', padding: '6px 14px' }}>
-            {report?.overallSuccess ? '✓ ALL 12 CHECKS PASSED' : '✗ ADK CHECKS FAILED'}
+            {report?.overallSuccess ? `✓ ALL ${report?.totalChecks || 13} CHECKS PASSED` : '✗ ADK CHECKS FAILED'}
           </span>
         </div>
       </div>
@@ -50,12 +50,12 @@ export default function ArtifactInspector({ buildJob, onReset }) {
         <div className="glass-card" style={{ padding: '16px', borderLeft: '4px solid #7c3aed', background: '#f5f3ff' }}>
           <div style={{ fontSize: '13px', color: '#5b21b6', marginBottom: '4px', fontWeight: '500' }}>Inspection Score</div>
           <span style={{ fontSize: '20px', fontWeight: '700', color: '#6d28d9' }}>
-            {report?.passedChecks || 0} / {report?.totalChecks || 12}
+            {report?.passedChecks || 0} / {report?.totalChecks || 13}
           </span>
         </div>
       </div>
 
-      {/* 12 Check Cards Grid */}
+      {/* Check Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '12px', marginBottom: '24px' }}>
         {items.map((item) => (
           <div
@@ -92,14 +92,15 @@ export default function ArtifactInspector({ buildJob, onReset }) {
         </button>
 
         {buildJob?.id && (
-          <a
-            href={getEsaDownloadUrl(buildJob.id)}
-            download
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              downloadEsa(buildJob.id);
+            }}
             className="btn-primary"
-            style={{ textDecoration: 'none' }}
           >
             <Download size={16} /> Download ESA Deployment Package (.esa)
-          </a>
+          </button>
         )}
       </div>
     </div>

@@ -38,12 +38,12 @@ public class AdapterGeneratorService {
     private TechnologyRegistry registry;
 
     public Map<String, String> generateProjectSources(AdapterSpecification spec, Path workspaceDir) throws Exception {
+        validateSpecification(spec);
+
         LOG.info("Generating project dynamically for adapter '{}' (scheme={}, target={}) in {}",
                 spec.getAdapter().getName(), spec.getAdapter().getScheme(),
                 spec.getTarget() != null ? spec.getTarget().getTechnology() : "unknown",
                 workspaceDir);
-
-        pruneOldWorkspaces(workspaceDir.getParent());
 
         Map<String, String> generatedFiles = new LinkedHashMap<>();
         Map<String, String> ctx = buildContext(spec);
@@ -97,11 +97,25 @@ public class AdapterGeneratorService {
             write(generatedFiles, javaSrcDir.resolve(cls + "Component.java"),
                     render("component.java.template", ctx),
                     cls + "Component.java");
-
             // 2. Endpoint.java
             write(generatedFiles, javaSrcDir.resolve(cls + "Endpoint.java"),
                     render("endpoint.java.template", ctx),
                     cls + "Endpoint.java");
+
+            // 2b. ContextClassLoaderGuard.java
+            write(generatedFiles, javaSrcDir.resolve("ContextClassLoaderGuard.java"),
+                    render("ContextClassLoaderGuard.java.template", ctx),
+                    "ContextClassLoaderGuard.java");
+
+            String packageDir = ctx.get("packagePath").replace('.', '/');
+            Path javaTestDir = workspaceDir.resolve("src/test/java").resolve(packageDir);
+            Files.createDirectories(javaTestDir);
+            write(generatedFiles, javaTestDir.resolve("ContextClassLoaderGuardTest.java"),
+                    render("ContextClassLoaderGuardTest.java.template", ctx),
+                    "ContextClassLoaderGuardTest.java");
+            write(generatedFiles, javaTestDir.resolve(cls + "ComponentTest.java"),
+                    render("ComponentTest.java.template", ctx),
+                    cls + "ComponentTest.java");
 
             // 3. Producer and/or Consumer
             String direction = spec.getAdapter().getDirection();
@@ -151,34 +165,37 @@ public class AdapterGeneratorService {
         LOG.info("Generated {} source files in {}", generatedFiles.size(), workspaceDir);
         return generatedFiles;
     }
-
-    private void pruneOldWorkspaces(Path workspacesRoot) {
-        if (workspacesRoot == null || !Files.exists(workspacesRoot))
-            return;
-        try (Stream<Path> stream = Files.list(workspacesRoot)) {
-            stream.filter(Files::isDirectory)
-                    .filter(p -> p.getFileName().toString().startsWith("build-"))
-                    .forEach(p -> {
-                        try {
-                            deleteDirectoryRecursively(p);
-                        } catch (Exception e) {
-                            LOG.warn("Could not delete old build workspace {}: {}", p, e.getMessage());
-                        }
-                    });
-        } catch (Exception e) {
-            LOG.warn("Error pruning old workspaces: {}", e.getMessage());
+    private void validateSpecification(AdapterSpecification spec) {
+        if (spec == null || spec.getAdapter() == null) {
+            throw new IllegalArgumentException("AdapterSpecification and adapter metadata are required");
         }
-    }
-
-    private void deleteDirectoryRecursively(Path dir) throws Exception {
-        try (Stream<Path> stream = Files.walk(dir)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(p -> {
-                        try {
-                            Files.deleteIfExists(p);
-                        } catch (Exception ignored) {
-                        }
-                    });
+        if (spec.getAdapter().getName() == null || spec.getAdapter().getName().isBlank()) {
+            throw new IllegalArgumentException("Adapter name is required");
+        }
+        if (spec.getAdapter().getVendor() == null || spec.getAdapter().getVendor().isBlank()) {
+            throw new IllegalArgumentException("Adapter vendor is required");
+        }
+        if (spec.getAdapter().getVersion() == null || spec.getAdapter().getVersion().isBlank()) {
+            throw new IllegalArgumentException("Adapter version is required");
+        }
+        if (spec.getAdapter().getScheme() == null || spec.getAdapter().getScheme().isBlank()) {
+            throw new IllegalArgumentException("Adapter scheme is required");
+        }
+        if (spec.getAdapter().getPackagePath() == null || spec.getAdapter().getPackagePath().isBlank()) {
+            throw new IllegalArgumentException("Adapter packagePath is required");
+        }
+        String direction = spec.getAdapter().getDirection();
+        if (direction == null || (!direction.equalsIgnoreCase("sender") && !direction.equalsIgnoreCase("receiver") && !direction.equalsIgnoreCase("both"))) {
+            throw new IllegalArgumentException("Adapter direction must be sender, receiver, or both");
+        }
+        if (spec.getTarget() == null || spec.getTarget().getTechnology() == null || spec.getTarget().getTechnology().isBlank()) {
+            throw new IllegalArgumentException("Target technology is required");
+        }
+        if (spec.getRuntime() == null) {
+            throw new IllegalArgumentException("Runtime metadata is required");
+        }
+        if (spec.getConnection() == null) {
+            throw new IllegalArgumentException("Connection metadata is required");
         }
     }
 
@@ -194,11 +211,19 @@ public class AdapterGeneratorService {
 
         String artifactId = scheme.toLowerCase().replaceAll("[^a-z0-9\\-]", "-");
 
+        String vendorId = vendor != null ? vendor.trim().replaceAll("[^a-zA-Z0-9\\-_\\.]", "_") : "custom";
+        if (vendorId.isEmpty()) vendorId = "custom";
+        
+        String adapterNameId = name != null ? name.trim().replaceAll("[^a-zA-Z0-9\\-_\\.]", "_") : "custom";
+        if (adapterNameId.isEmpty()) adapterNameId = "custom";
+
         ctx.put("adapterName", name);
+        ctx.put("adapterNameId", adapterNameId);
         ctx.put("adapterClassName", cls);
         ctx.put("scheme", scheme);
         ctx.put("packagePath", pkg);
         ctx.put("vendor", vendor);
+        ctx.put("vendorId", vendorId);
         ctx.put("adapterVersion", version);
         ctx.put("artifactId", artifactId);
         ctx.put("targetTechnology", spec.getTarget() != null ? spec.getTarget().getTechnology() : "Target System");
@@ -247,7 +272,7 @@ public class AdapterGeneratorService {
                         : "        LOG.info(\"Polling logic for "
                                 + (spec.getTarget() != null ? spec.getTarget().getTechnology() : "Target System")
                                 + "\");";
-        String consumerImpl = sanitizeProducerImplementation(rawConsumerImpl, params);
+        String consumerImpl = sanitizeConsumerImplementation(rawConsumerImpl, params);
 
         String direction = spec.getAdapter().getDirection();
         String endpointProducer = "";
@@ -259,7 +284,9 @@ public class AdapterGeneratorService {
         if ("sender".equalsIgnoreCase(direction) || "both".equalsIgnoreCase(direction)) {
             endpointConsumer = "    @Override\n" +
                     "    public Consumer createConsumer(Processor processor) throws Exception {\n" +
-                    "        return new " + cls + "Consumer(this, processor);\n" +
+                    "        " + cls + "Consumer consumer = new " + cls + "Consumer(this, processor);\n" +
+                    "        configureConsumer(consumer);\n" +
+                    "        return consumer;\n" +
                     "    }";
             if ("sender".equalsIgnoreCase(direction)) {
                 endpointProducer = "    @Override\n" +
@@ -269,10 +296,11 @@ public class AdapterGeneratorService {
             }
             
             senderVariant = "    <Variant VariantName=\"${adapterName} Sender\"\n" +
-                    "             VariantId=\"ctype::AdapterVariant/cname::${adapterName}/vendor::${vendor}/tp::${scheme}/mp::${scheme}/direction::Sender\"\n" +
+                    "             VariantId=\"ctype::AdapterVariant/cname::${adapterNameId}/vendor::${vendorId}/tp::${scheme}/mp::${scheme}/direction::Sender\"\n" +
                     "             MetadataVersion=\"2.0\"\n" +
                     "             gen:RuntimeComponentBaseUri=\"${scheme}\"\n" +
-                    "             AttachmentBehavior=\"Preserve\">\n" +
+                    "             AttachmentBehavior=\"Preserve\"\n" +
+                    "             supportsPolling=\"true\">\n" +
                     "        <OutputContent Cardinality=\"1\" Scope=\"outsidepool\" MessageCardinality=\"1\" isStreaming=\"false\">\n" +
                     "            <Content>\n" +
                     "                <ContentType>Any</ContentType>\n" +
@@ -325,7 +353,7 @@ public class AdapterGeneratorService {
             }
             
             receiverVariant = "    <Variant VariantName=\"${adapterName} Receiver\"\n" +
-                    "             VariantId=\"ctype::AdapterVariant/cname::${adapterName}/vendor::${vendor}/tp::${scheme}/mp::${scheme}/direction::Receiver\"\n" +
+                    "             VariantId=\"ctype::AdapterVariant/cname::${adapterNameId}/vendor::${vendorId}/tp::${scheme}/mp::${scheme}/direction::Receiver\"\n" +
                     "             IsRequestResponse=\"true\"\n" +
                     "             MetadataVersion=\"2.0\"\n" +
                     "             gen:RuntimeComponentBaseUri=\"${scheme}\"\n" +
@@ -367,13 +395,17 @@ public class AdapterGeneratorService {
         }
         
         if (!senderVariant.isEmpty()) {
-            senderVariant = senderVariant.replace("${adapterName}", name)
+            senderVariant = senderVariant.replace("${adapterNameId}", adapterNameId)
+                                         .replace("${adapterName}", name)
+                                         .replace("${vendorId}", vendorId)
                                          .replace("${vendor}", vendor)
                                          .replace("${scheme}", scheme)
                                          .replace("${senderAttributeReferences}", buildAttributeReferences(params));
         }
         if (!receiverVariant.isEmpty()) {
-            receiverVariant = receiverVariant.replace("${adapterName}", name)
+            receiverVariant = receiverVariant.replace("${adapterNameId}", adapterNameId)
+                                             .replace("${adapterName}", name)
+                                             .replace("${vendorId}", vendorId)
                                              .replace("${vendor}", vendor)
                                              .replace("${scheme}", scheme)
                                              .replace("${receiverAttributeReferences}", buildAttributeReferences(params));
@@ -417,7 +449,7 @@ public class AdapterGeneratorService {
         // AI frequently hallucinates camel wrapper modules that were removed in Camel
         // 3.x.
         deps = deps.replaceAll(
-                "(?s)<dependency>\\s*<groupId>org\\.apache\\.camel</groupId>\\s*<artifactId>camel-[^<]+</artifactId>.*?</dependency>",
+                "(?s)<dependency>\\s*<groupId>org\\.apache\\.camel</groupId>\\s*<artifactId>camel-core</artifactId>.*?</dependency>",
                 "");
 
         // GENERIC RULE 2: Strip any provided-scope or test-scope dependencies.
@@ -484,17 +516,59 @@ public class AdapterGeneratorService {
                 String varName = toCamelCase(p.getName());
                 // Only wrap params whose names suggest numeric values (port, qos, timeout,
                 // retries, etc.)
-                if (varName.toLowerCase().matches(
-                        ".*(port|qos|timeout|retries|retry|count|size|level|interval|batch|limit|ttl|max|min|num|delay).*")) {
-                    // Wrap standalone usage: ", varName," or ", varName)"
-                    impl = impl.replaceAll(",\\s*" + varName + "\\s*,", ", Integer.parseInt(" + varName + "),");
-                    impl = impl.replaceAll(",\\s*" + varName + "\\s*\\)", ", Integer.parseInt(" + varName + "))");
-                }
+
             }
         }
 
 
 
+        return impl;
+    }
+
+    /**
+     * Strictly validates and sanitizes AI-generated consumer implementation code.
+     * Ensures the AI does not violate the generation contract by emitting template-owned
+     * constructs (e.g. return statements, variable declarations, methods).
+     */
+    private String sanitizeConsumerImplementation(String rawImpl, List<ConnectionParameter> params) {
+        if (rawImpl == null || rawImpl.isBlank()) {
+            return rawImpl;
+        }
+
+        // Fail fast if AI violates the contract by generating template-owned constructs
+        if (rawImpl.matches("(?s).*\\bclass\\s+\\w+.*")) {
+            // Allow anonymous inner classes (new ClassName() { ... }), but prevent top-level class declarations
+            if (!rawImpl.matches("(?s).*new\\s+\\w+\\s*\\(\\)\\s*\\{.*")) {
+                throw new IllegalArgumentException("AI generated a class declaration in consumerImplementation. Contract violation.");
+            }
+        }
+        if (rawImpl.matches("(?s).*\\bint\\s+messagesProcessed\\b.*")) {
+            throw new IllegalArgumentException("AI generated messagesProcessed declaration. Contract violation.");
+        }
+        if (rawImpl.matches("(?s).*\\breturn\\s+messagesProcessed\\s*;.*") || rawImpl.matches("(?s).*\\breturn\\s*;.*")) {
+            throw new IllegalArgumentException("AI generated a return statement for poll(). Contract violation.");
+        }
+        if (rawImpl.contains("extends ScheduledPollConsumer")) {
+            throw new IllegalArgumentException("AI generated ScheduledPollConsumer inheritance. Contract violation.");
+        }
+        if (rawImpl.contains("configureConsumer")) {
+            throw new IllegalArgumentException("AI generated configureConsumer call. Contract violation.");
+        }
+        if (rawImpl.contains("processMessage(Object")) {
+            throw new IllegalArgumentException("AI generated processMessage declaration. Contract violation.");
+        }
+
+        // Apply generic parameter duplicate variable stripping
+        String impl = rawImpl;
+        if (params != null) {
+            for (ConnectionParameter p : params) {
+                String varName = toCamelCase(p.getName());
+                // Strip "String varName =" → "varName =" (re-assignment, not re-declaration)
+                impl = impl.replaceAll("(?m)^(\\s*)String\\s+" + varName + "\\s*=", "$1" + varName + " =");
+                // Strip "int varName =" → rename to avoid conflict
+                impl = impl.replaceAll("(?m)^(\\s*)int\\s+" + varName + "\\s*=", "$1" + varName + " =");
+            }
+        }
         return impl;
     }
 
@@ -589,11 +663,14 @@ public class AdapterGeneratorService {
             String dataType = mapDataType(p);
             sb.append("    <AttributeMetadata>\n");
             sb.append("        <Name>").append(p.getName()).append("</Name>\n");
-            sb.append("        <Usage>false</Usage>\n");
+            sb.append("        <Usage>").append(p.isRequired()).append("</Usage>\n");
             sb.append("        <DataType>").append(dataType).append("</DataType>\n");
             sb.append("        <Default>").append(p.getDefaultValue() != null ? p.getDefaultValue() : "")
                     .append("</Default>\n");
             sb.append("        <Length/>\n");
+            if ("secure-alias".equalsIgnoreCase(p.getType())) {
+                sb.append("        <AttributeBehavior>SecureAlias</AttributeBehavior>\n");
+            }
             sb.append("        <isparameterized>true</isparameterized>\n");
             sb.append("        <GuiLabels guid=\"").append(uuid).append("\">\n");
             sb.append("            <Label language=\"EN\">").append(escapeXml(p.getLabel())).append("</Label>\n");
@@ -607,8 +684,7 @@ public class AdapterGeneratorService {
     private String renderTemplateDynamic(String path, Map<String, String> context) throws Exception {
         try (InputStream is = getClass().getResourceAsStream(path)) {
             if (is == null) {
-                LOG.error("Template not found: {}", path);
-                return "";
+                throw new IllegalArgumentException("Template not found: " + path);
             }
             String template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             for (Map.Entry<String, String> entry : context.entrySet()) {
@@ -647,6 +723,13 @@ public class AdapterGeneratorService {
     }
 
     private void write(Map<String, String> files, Path dest, String content, String displayKey) throws Exception {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\$\\{([^}]+)\\}").matcher(content);
+        while (m.find()) {
+            String expr = m.group(1);
+            if (!expr.startsWith("project.") && !expr.equals("maven-resources") && !expr.equals("camel.version") && !expr.equals("adk.version") && !expr.equals("generic.api.version")) {
+                throw new IllegalStateException("Generated file " + displayKey + " contains unresolved NexusForge placeholder: ${" + expr + "}");
+            }
+        }
         Files.writeString(dest, content, StandardCharsets.UTF_8);
         files.put(displayKey, content);
     }
@@ -692,24 +775,15 @@ public class AdapterGeneratorService {
     private String mapDataType(ConnectionParameter p) {
         if (p == null) return "xsd:string";
         String type = p.getType() != null ? p.getType().toLowerCase() : "";
-        String name = p.getName() != null ? p.getName().toLowerCase() : "";
-        String defVal = p.getDefaultValue() != null ? p.getDefaultValue().toLowerCase().trim() : "";
-
-        // Check if parameter is a boolean (by type, default value "true"/"false", or boolean param name)
-        if ("boolean".equalsIgnoreCase(type)
-                || "true".equals(defVal)
-                || "false".equals(defVal)
-                || name.matches(".*(cleansession|ssl|tls|reconnect|enabled|disabled|useauth).*")) {
+        if ("boolean".equalsIgnoreCase(type)) {
             return "xsd:boolean";
         }
-
         if ("integer".equalsIgnoreCase(type) || "int".equalsIgnoreCase(type)) {
             return "xsd:integer";
         }
         if ("long".equalsIgnoreCase(type)) {
             return "xsd:long";
         }
-
         return "xsd:string";
     }
 

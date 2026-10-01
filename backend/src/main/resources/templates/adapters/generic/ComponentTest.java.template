@@ -1,0 +1,45 @@
+package ${packagePath};
+
+import org.apache.camel.Endpoint;
+import org.junit.Test;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
+
+public class ${adapterClassName}ComponentTest {
+
+    @Test
+    public void testCreateEndpointTCCLGuard_Success() throws Exception {
+        ${adapterClassName}Component component = new ${adapterClassName}Component();
+        ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+        
+        Map<String, Object> parameters = new HashMap<>();
+        // normal properties that don't fail in setProperties
+        
+        Endpoint endpoint = component.createEndpoint("${scheme}://foo", "foo", parameters);
+        
+        assertNotNull(endpoint);
+        assertEquals("TCCL must be restored on success", originalTccl, Thread.currentThread().getContextClassLoader());
+    }
+
+    @Test
+    public void testCreateEndpointTCCLGuard_Exception() {
+        ${adapterClassName}Component component = new ${adapterClassName}Component();
+        ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+        
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("invalidPropertyThatCausesException", "value");
+
+        try {
+            component.createEndpoint("${scheme}://foo", "foo", parameters);
+            fail("Expected exception was not thrown");
+        } catch (Exception e) {
+            // Expected
+        }
+
+        assertEquals("TCCL must be restored on exception", originalTccl, Thread.currentThread().getContextClassLoader());
+    }
+}

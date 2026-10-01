@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8' standalone='yes'?>
 <ComponentMetadata xmlns:gen="http://www.sap.hci.adk.com/gen"
                    xmlns:bp="http://www.adk.gen/xmlns/blueprint"
-                   ComponentId="ctype::Adapter/cname::${adapterName}/vendor::${vendor}/version::${adapterVersion}"
+                   ComponentId="ctype::Adapter/cname::${adapterNameId}/vendor::${vendorId}/version::${adapterVersion}"
                    ComponentName="${adapterName}"
                    UIElementType="Adapter"
                    IsExtension="false"

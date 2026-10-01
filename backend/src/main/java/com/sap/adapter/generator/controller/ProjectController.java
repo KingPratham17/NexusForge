@@ -11,13 +11,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.FileSystemUtils;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.io.IOException;
 @RestController
 @RequestMapping("/api/v1/projects")
 public class ProjectController {
 
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
+
+    @Value("${adapter.generator.workspaces-dir:C:/Users/pratham.wadeiyar/.gemini/antigravity-ide/scratch/build-workspaces}")
+    private String workspacesRootDir;
 
     public ProjectController(ProjectRepository projectRepository, UserRepository userRepository) {
         this.projectRepository = projectRepository;
@@ -78,9 +85,33 @@ public class ProjectController {
                     if (updates.getStatus() != null) existing.setStatus(updates.getStatus());
                     if (updates.getRequirement() != null) existing.setRequirement(updates.getRequirement());
                     if (updates.getAdapterSpecificationJson() != null) existing.setAdapterSpecificationJson(updates.getAdapterSpecificationJson());
-                    if (updates.getBuildId() != null) existing.setBuildId(updates.getBuildId());
                     
                     return ResponseEntity.ok(projectRepository.save(existing));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteProject(@PathVariable Long id) {
+        User user = getCurrentUser();
+        if (user == null) return ResponseEntity.status(401).build();
+
+        return projectRepository.findById(id)
+                .filter(p -> p.getUser().getId().equals(user.getId()))
+                .map(existing -> {
+                    if (existing.getBuildId() != null && workspacesRootDir != null) {
+                        try {
+                            Path root = Paths.get(workspacesRootDir).normalize().toAbsolutePath();
+                            Path workspacePath = root.resolve(existing.getBuildId()).normalize();
+                            if (workspacePath.startsWith(root)) {
+                                FileSystemUtils.deleteRecursively(workspacePath);
+                            }
+                        } catch (Exception e) {
+                            // ignore
+                        }
+                    }
+                    projectRepository.delete(existing);
+                    return ResponseEntity.ok().<Void>build();
                 })
                 .orElse(ResponseEntity.notFound().build());
     }

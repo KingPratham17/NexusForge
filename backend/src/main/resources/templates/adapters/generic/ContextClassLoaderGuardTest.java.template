@@ -1,0 +1,56 @@
+package ${packagePath};
+
+import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.fail;
+
+public class ContextClassLoaderGuardTest {
+
+    @Test
+    public void testTcclIsSwitchedAndRestored() throws Exception {
+        ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+        ClassLoader targetClassLoader = this.getClass().getClassLoader();
+        
+        // Use a dummy classloader to simulate a different thread context
+        ClassLoader dummyClassLoader = new ClassLoader() {};
+        Thread.currentThread().setContextClassLoader(dummyClassLoader);
+        
+        try {
+            ContextClassLoaderGuard.executeWithTCCL(targetClassLoader, () -> {
+                ClassLoader currentTccl = Thread.currentThread().getContextClassLoader();
+                assertSame("TCCL should be switched to target classloader during execution", targetClassLoader, currentTccl);
+                return null;
+            });
+            
+            ClassLoader restoredTccl = Thread.currentThread().getContextClassLoader();
+            assertSame("TCCL should be restored to the original dummy classloader after execution", dummyClassLoader, restoredTccl);
+            
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalTccl);
+        }
+    }
+    
+    @Test
+    public void testTcclIsRestoredAfterException() {
+        ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+        ClassLoader targetClassLoader = this.getClass().getClassLoader();
+        
+        ClassLoader dummyClassLoader = new ClassLoader() {};
+        Thread.currentThread().setContextClassLoader(dummyClassLoader);
+        
+        try {
+            ContextClassLoaderGuard.executeWithTCCL(targetClassLoader, () -> {
+                throw new RuntimeException("Simulated target execution exception");
+            });
+            fail("Exception should have been thrown");
+        } catch (Exception e) {
+            assertEquals("Simulated target execution exception", e.getMessage());
+            
+            ClassLoader restoredTccl = Thread.currentThread().getContextClassLoader();
+            assertSame("TCCL should be restored even if an exception occurs", dummyClassLoader, restoredTccl);
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalTccl);
+        }
+    }
+}

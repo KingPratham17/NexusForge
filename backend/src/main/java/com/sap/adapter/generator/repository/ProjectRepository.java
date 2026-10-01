@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface ProjectRepository extends JpaRepository<Project, Long> {
     List<Project> findByUserIdOrderByLastUpdatedDesc(Long userId);
+    java.util.Optional<Project> findByBuildId(String buildId);
 }

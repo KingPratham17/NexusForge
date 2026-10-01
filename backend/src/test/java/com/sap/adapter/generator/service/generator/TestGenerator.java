@@ -31,7 +31,7 @@ public class TestGenerator {
         target.setTechnology("rest-http");
         spec.setTarget(target);
         
-        Path ws = Paths.get("C:/Users/pratham.wadeiyar/.gemini/antigravity-ide/scratch/backend-test");
+        Path ws = Paths.get("../../backend-test").toAbsolutePath();
         service.generateProjectSources(spec, ws);
         
         System.out.println("Generation complete.");
